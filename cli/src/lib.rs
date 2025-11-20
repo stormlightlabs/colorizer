@@ -2,13 +2,14 @@ use colors::{Hsl, Hsv, Rgb, clamp01};
 use std::ops::Range;
 
 mod conversions;
-pub mod tinted_theming;
 mod vimrc;
 
 pub mod colors;
 pub mod diffs;
 pub mod palette;
 pub mod random;
+pub mod syntax;
+pub mod tinted_theming;
 pub mod wcag;
 
 pub mod harmonies;

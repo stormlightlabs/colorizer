@@ -4,8 +4,11 @@ use colorizer::{
     colors::Srgb8,
     palette::{PaletteLabelStyle, golden_ratio_palette, palette_from_base, palette_to_image},
     random::{self, PaletteConstraints, PoissonConfig},
+    syntax,
     tinted_theming::{self, SchemeMetadata},
 };
+use std::fs::File;
+use std::io::{self, BufReader, Read};
 use std::ops::Range;
 
 #[derive(Parser)]
@@ -407,29 +410,115 @@ fn handle_vim_scheme(scheme_yaml: String, name: String, output_colors: String, u
 fn handle_demo(demo_type: DemoType) {
     match demo_type {
         DemoType::Palette { colors, scheme_yaml } => {
-            println!("Displaying palette in terminal");
-            if let Some(c) = colors {
-                println!("Colors: {c}");
-            }
-            if let Some(s) = scheme_yaml {
-                println!("Scheme: {s}");
-            }
+            let palette = if let Some(color_list) = colors {
+                match parse_color_list(&color_list) {
+                    Ok(colors) => colors,
+                    Err(err) => {
+                        eprintln!("{err}");
+                        return;
+                    }
+                }
+            } else if let Some(scheme_path) = scheme_yaml {
+                // Try Base16 first, then Base24
+                if let Ok(schemes) = tinted_theming::load_base16_schemes(&scheme_path) {
+                    schemes[0].colors().to_vec()
+                } else if let Ok(schemes) = tinted_theming::load_base24_schemes(&scheme_path) {
+                    schemes[0].colors().to_vec()
+                } else {
+                    eprintln!("Failed to load scheme from {scheme_path}");
+                    return;
+                }
+            } else {
+                eprintln!("Provide either --colors or --scheme-yaml");
+                return;
+            };
+
+            let labels: Vec<String> = (0..palette.len()).map(|i| format!("base{:02X}", i)).collect();
+
+            syntax::display_palette_in_terminal(&palette, Some(&labels));
         }
         DemoType::Code { language, theme_yaml, base, harmony, file } => {
-            println!("Highlighting code in {language}");
-            if let Some(t) = theme_yaml {
-                println!("Theme: {t}");
-            }
-            if let Some(b) = base {
-                println!("Base color: {b}");
-                if let Some(h) = harmony {
-                    println!("Harmony: {h}");
+            let theme = if let Some(theme_path) = theme_yaml {
+                if let Ok(schemes) = tinted_theming::load_base16_schemes(&theme_path) {
+                    syntax::base16_to_theme(&schemes[0])
+                } else if let Ok(schemes) = tinted_theming::load_base24_schemes(&theme_path) {
+                    syntax::base24_to_theme(&schemes[0])
+                } else {
+                    eprintln!("Failed to load theme from {theme_path}");
+                    return;
                 }
-            }
-            if let Some(f) = file {
-                println!("File: {f}");
+            } else if let Some(base_color) = base {
+                let base_srgb = match parse_hex_color(&base_color) {
+                    Ok(color) => color,
+                    Err(err) => {
+                        eprintln!("{err}");
+                        return;
+                    }
+                };
+
+                let harmony_kind = harmony
+                    .as_ref()
+                    .and_then(|h| parse_harmony_kind(h))
+                    .unwrap_or(HarmonyKind::Complementary);
+
+                let palette = palette_from_base(base_srgb, harmony_kind, 16, None, None, None);
+                if palette.len() < 16 {
+                    eprintln!("Failed to generate sufficient colors for theme");
+                    return;
+                }
+
+                let mut colors = [Srgb8::new(0, 0, 0); 16];
+                for (i, &color) in palette.iter().take(16).enumerate() {
+                    colors[i] = color;
+                }
+
+                let metadata = SchemeMetadata {
+                    system: "base16".to_string(),
+                    name: "Generated".to_string(),
+                    author: None,
+                    variant: None,
+                };
+
+                let scheme = tinted_theming::Base16Scheme::new(metadata, colors);
+                syntax::base16_to_theme(&scheme)
             } else {
-                println!("Reading from stdin");
+                eprintln!("Provide either --theme-yaml or --base");
+                return;
+            };
+
+            // Load syntax
+            let syntax_set = syntax::load_syntax_set();
+            let syntax = match syntax::find_syntax_by_name(&syntax_set, &language) {
+                Some(syn) => syn,
+                None => {
+                    eprintln!("Unknown language: {language}");
+                    return;
+                }
+            };
+
+            if let Some(file_path) = file {
+                match File::open(&file_path) {
+                    Ok(file) => {
+                        let reader = BufReader::new(file);
+                        if let Err(err) = syntax::highlight_code_to_terminal(reader, syntax, &theme) {
+                            eprintln!("Failed to highlight code: {err}");
+                        }
+                    }
+                    Err(err) => {
+                        eprintln!("Failed to open {file_path}: {err}");
+                    }
+                }
+            } else {
+                let stdin = io::stdin();
+                let mut code = String::new();
+                if let Err(err) = stdin.lock().read_to_string(&mut code) {
+                    eprintln!("Failed to read from stdin: {err}");
+                    return;
+                }
+
+                if let Err(err) = syntax::highlight_string_to_terminal(&code, syntax, &theme) {
+                    eprintln!("Failed to highlight code: {err}");
+                }
             }
         }
     }

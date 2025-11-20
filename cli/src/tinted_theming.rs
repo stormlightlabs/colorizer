@@ -1,6 +1,7 @@
 //! Base16/Base24 scheme parsing helpers compatible with tinted-theming.
 
 use crate::colors::{Rgb, Srgb8};
+
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fmt;
@@ -35,6 +36,10 @@ pub struct Base16Scheme {
 }
 
 impl Base16Scheme {
+    pub fn new(metadata: SchemeMetadata, colors: [Srgb8; 16]) -> Self {
+        Self { metadata, colors }
+    }
+
     pub fn colors(&self) -> &[Srgb8] {
         &self.colors
     }
@@ -52,6 +57,10 @@ pub struct Base24Scheme {
 }
 
 impl Base24Scheme {
+    pub fn new(metadata: SchemeMetadata, colors: [Srgb8; 24]) -> Self {
+        Self { metadata, colors }
+    }
+
     pub fn colors(&self) -> &[Srgb8] {
         &self.colors
     }
