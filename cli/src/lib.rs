@@ -2,7 +2,7 @@ use colors::{Hsl, Hsv, Rgb, clamp01};
 use std::ops::Range;
 
 mod conversions;
-mod tinted_theming;
+pub mod tinted_theming;
 mod vimrc;
 
 pub mod colors;

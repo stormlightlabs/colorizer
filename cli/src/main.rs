@@ -4,6 +4,7 @@ use colorizer::{
     colors::Srgb8,
     palette::{PaletteLabelStyle, golden_ratio_palette, palette_from_base, palette_to_image},
     random::{self, PaletteConstraints, PoissonConfig},
+    tinted_theming::{self, SchemeMetadata},
 };
 use std::ops::Range;
 
@@ -262,14 +263,26 @@ fn handle_palette(action: PaletteAction) {
                 output_palette(&palette, &format);
             }
         }
-        PaletteAction::Base16 { scheme_yaml, format } => {
-            println!("Exporting Base16 palette from {scheme_yaml}");
-            println!("Format: {format}");
-        }
-        PaletteAction::Base24 { scheme_yaml, format } => {
-            println!("Exporting Base24 palette from {scheme_yaml}");
-            println!("Format: {format}");
-        }
+        // TODO: add combined JSON/YAML output when directory inputs produce multiple schemes.
+        PaletteAction::Base16 { scheme_yaml, format } => match tinted_theming::load_base16_schemes(&scheme_yaml) {
+            Ok(schemes) => {
+                for scheme in schemes {
+                    print_scheme_header(&scheme.metadata);
+                    output_palette(scheme.colors(), &format);
+                }
+            }
+            Err(err) => eprintln!("Failed to load Base16 scheme: {err}"),
+        },
+        // TODO: add combined JSON/YAML output when directory inputs produce multiple schemes.
+        PaletteAction::Base24 { scheme_yaml, format } => match tinted_theming::load_base24_schemes(&scheme_yaml) {
+            Ok(schemes) => {
+                for scheme in schemes {
+                    print_scheme_header(&scheme.metadata);
+                    output_palette(scheme.colors(), &format);
+                }
+            }
+            Err(err) => eprintln!("Failed to load Base24 scheme: {err}"),
+        },
     }
 }
 
@@ -328,6 +341,16 @@ fn base16_labels(len: usize) -> Vec<String> {
         "base16", "base17",
     ];
     BASE16_KEYS.iter().take(len).map(|label| label.to_string()).collect()
+}
+
+fn print_scheme_header(meta: &SchemeMetadata) {
+    println!("Scheme: {}", meta.name);
+    if let Some(author) = &meta.author {
+        println!("  Author: {author}");
+    }
+    if let Some(variant) = &meta.variant {
+        println!("  Variant: {variant}");
+    }
 }
 
 fn handle_image(
