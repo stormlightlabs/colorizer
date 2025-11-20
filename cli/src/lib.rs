@@ -4,7 +4,7 @@ use std::ops::Range;
 pub mod colors;
 mod conversions;
 pub mod diffs;
-mod palette;
+pub mod palette;
 mod random;
 mod tinted_theming;
 mod vimrc;

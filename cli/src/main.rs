@@ -1,4 +1,10 @@
 use clap::{Parser, Subcommand};
+use colorizer::{
+    HarmonyKind,
+    colors::Srgb8,
+    palette::{golden_ratio_palette, palette_from_base},
+};
+use std::ops::Range;
 
 #[derive(Parser)]
 #[command(name = "colorizer")]
@@ -193,24 +199,55 @@ fn main() {
 fn handle_palette(action: PaletteAction) {
     match action {
         PaletteAction::FromBase { base, harmony, count, min_contrast, background, format } => {
-            println!("Generating palette from base {base} with {harmony} harmony");
-            println!("Count: {count}, Format: {format}");
-            if let Some(contrast) = min_contrast {
-                println!("Minimum contrast: {contrast}");
-            }
-            if let Some(bg) = background {
-                println!("Background: {bg}");
+            let base_color = match parse_hex_color(&base) {
+                Ok(color) => color,
+                Err(err) => {
+                    eprintln!("{err}");
+                    return;
+                }
+            };
+
+            let harmony_kind = match parse_harmony_kind(&harmony) {
+                Some(kind) => kind,
+                None => {
+                    eprintln!("Unsupported harmony kind: {harmony}");
+                    return;
+                }
+            };
+
+            let background_color = match background.as_deref().map(parse_hex_color) {
+                Some(Ok(color)) => Some(color),
+                Some(Err(err)) => {
+                    eprintln!("{err}");
+                    return;
+                }
+                None => None,
+            };
+
+            let palette = palette_from_base(base_color, harmony_kind, count, None, background_color, min_contrast);
+            if palette.is_empty() {
+                eprintln!("No colors meet the requested constraints.");
+            } else {
+                output_palette(&palette, &format);
             }
         }
         PaletteAction::Random { count, method, min_delta_e, theme, format } => {
-            println!("Generating {count} random colors using {method} method");
-            if let Some(delta_e) = min_delta_e {
-                println!("Minimum Delta E: {delta_e}");
+            let palette = match method.as_str() {
+                "golden" => {
+                    let (s_range, l_range) = golden_theme_ranges(theme.as_deref());
+                    golden_ratio_palette(count, s_range, l_range, min_delta_e)
+                }
+                other => {
+                    eprintln!("Random method '{other}' is not implemented yet.");
+                    Vec::new()
+                }
+            };
+
+            if palette.is_empty() {
+                eprintln!("No colors generated.");
+            } else {
+                output_palette(&palette, &format);
             }
-            if let Some(t) = theme {
-                println!("Theme: {t}");
-            }
-            println!("Format: {format}");
         }
         PaletteAction::Base16 { scheme_yaml, format } => {
             println!("Exporting Base16 palette from {scheme_yaml}");
@@ -220,6 +257,46 @@ fn handle_palette(action: PaletteAction) {
             println!("Exporting Base24 palette from {scheme_yaml}");
             println!("Format: {format}");
         }
+    }
+}
+
+fn parse_hex_color(value: &str) -> Result<Srgb8, String> {
+    Srgb8::from_hex(value).ok_or_else(|| format!("Invalid color value: {value}"))
+}
+
+fn parse_harmony_kind(value: &str) -> Option<HarmonyKind> {
+    match value {
+        "complementary" => Some(HarmonyKind::Complementary),
+        "split-complementary" => Some(HarmonyKind::SplitComplementary),
+        "analogous" => Some(HarmonyKind::Analogous(30.0)), // TODO: allow custom angle input
+        "triadic" => Some(HarmonyKind::Triadic),
+        "tetradic" => Some(HarmonyKind::Tetradic),
+        "square" => Some(HarmonyKind::Square),
+        _ => None,
+    }
+}
+
+fn output_palette(colors: &[Srgb8], format: &str) {
+    let hex_values: Vec<String> = colors.iter().map(|c| c.to_hex()).collect();
+    match format {
+        "json" => match serde_json::to_string_pretty(&hex_values) {
+            Ok(serialized) => println!("{serialized}"),
+            Err(err) => eprintln!("Failed to serialize palette to JSON: {err}"),
+        },
+        "yaml" => match serde_yml::to_string(&hex_values) {
+            Ok(serialized) => print!("{serialized}"),
+            Err(err) => eprintln!("Failed to serialize palette to YAML: {err}"),
+        },
+        // TODO: consider richer CLI output (labels, indexes) once UX spec is defined.
+        _ => println!("{}", hex_values.join(", ")),
+    }
+}
+
+fn golden_theme_ranges(theme: Option<&str>) -> (Range<f32>, Range<f32>) {
+    match theme {
+        Some("light") => (0.25..0.55, 0.6..0.9),
+        Some("dark") => (0.45..0.85, 0.2..0.45),
+        _ => (0.4..0.8, 0.35..0.7),
     }
 }
 

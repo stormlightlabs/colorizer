@@ -1,7 +1,6 @@
 //! WCAG (Web Content Accessibility Guidelines) color contrast utilities.
 //!
 //! Implements relative luminance and contrast ratio calculations per WCAG 2.1 specification.
-//! Used for ensuring text and UI elements meet accessibility standards for readability.
 
 use crate::colors::{Rgb, Srgb8};
 
@@ -45,9 +44,8 @@ pub fn relative_luminance(color: Srgb8) -> f32 {
 
 /// Calculates the contrast ratio between two colors per WCAG specification.
 ///
-/// The contrast ratio is calculated as (L1 + 0.05) / (L2 + 0.05), where L1 is the
-/// relative luminance of the lighter color and L2 is the relative luminance of the
-/// darker color. The ratio ranges from 1:1 (no contrast) to 21:1 (maximum contrast).
+/// The contrast ratio is calculated as (L1 + 0.05) / (L2 + 0.05), where L1 is the relative luminance of the lighter color and L2 is the relative luminance of the darker color.
+/// The ratio ranges from 1:1 (no contrast) to 21:1 (maximum contrast).
 ///
 /// WCAG 2.1 requirements:
 /// - AA Normal text: 4.5:1
@@ -124,8 +122,8 @@ pub fn meets_aaa_large(contrast: f32) -> bool {
 
 /// Selects the best foreground color from candidates that meets minimum contrast with background.
 ///
-/// Returns the first candidate color that achieves at least `min_ratio` contrast
-/// with the background. If no candidate meets the requirement, returns None.
+/// Returns the first candidate color that achieves at least `min_ratio` contrast with the background.
+/// If no candidate meets the requirement, returns None.
 ///
 /// This is useful for automatically choosing accessible text colors from a palette.
 ///
@@ -188,18 +186,9 @@ mod tests {
         let lum_g = relative_luminance(green);
         let lum_b = relative_luminance(blue);
 
-        assert!(
-            lum_g > lum_r,
-            "Green ({lum_g}) should be brighter than red ({lum_r})"
-        );
-        assert!(
-            lum_g > lum_b,
-            "Green ({lum_g}) should be brighter than blue ({lum_b})"
-        );
-        assert!(
-            lum_r > lum_b,
-            "Red ({lum_r}) should be brighter than blue ({lum_b})"
-        );
+        assert!(lum_g > lum_r, "Green ({lum_g}) should be brighter than red ({lum_r})");
+        assert!(lum_g > lum_b, "Green ({lum_g}) should be brighter than blue ({lum_b})");
+        assert!(lum_r > lum_b, "Red ({lum_r}) should be brighter than blue ({lum_b})");
     }
 
     #[test]
