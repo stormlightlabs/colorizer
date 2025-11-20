@@ -12,9 +12,10 @@ pub const DEFAULT_NEUTRAL_DEPTH: f32 = 1.0;
 
 const MIN_CONTRAST: f32 = 4.5;
 const DARK_NEUTRAL_CLASSIC: [f32; 8] = [0.08, 0.13, 0.18, 0.30, 0.50, 0.90, 0.95, 0.98];
-const DARK_NEUTRAL_MOODY: [f32; 8] = [0.03, 0.06, 0.10, 0.15, 0.22, 0.40, 0.58, 0.74];
+const DARK_NEUTRAL_MOODY: [f32; 8] = [0.008, 0.019, 0.033, 0.060, 0.100, 0.279, 0.456, 0.631];
 const LIGHT_NEUTRAL_CLASSIC: [f32; 8] = [0.98, 0.95, 0.90, 0.70, 0.50, 0.18, 0.13, 0.08];
-const LIGHT_NEUTRAL_MOODY: [f32; 8] = [0.74, 0.58, 0.40, 0.22, 0.15, 0.10, 0.06, 0.03];
+const LIGHT_NEUTRAL_MOODY: [f32; 8] = [0.95, 0.90, 0.80, 0.67, 0.54, 0.32, 0.20, 0.11];
+const NEUTRAL_SAT_DEPTH_FACTOR: f32 = 1.0;
 
 /// Theme variant determines background/foreground lightness progression.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -122,12 +123,12 @@ fn generate_neutrals(variant: Variant, neutral_depth: f32) -> [Srgb8; 8] {
         Variant::Dark => (
             blend_lightness_curve(&DARK_NEUTRAL_CLASSIC, &DARK_NEUTRAL_MOODY, depth),
             220.0,
-            NEUTRAL_MAX_SATURATION * 0.8,
+            adjusted_neutral_saturation(NEUTRAL_MAX_SATURATION * 0.8, depth),
         ),
         Variant::Light => (
             blend_lightness_curve(&LIGHT_NEUTRAL_CLASSIC, &LIGHT_NEUTRAL_MOODY, depth),
             40.0,
-            NEUTRAL_MAX_SATURATION * 0.6,
+            adjusted_neutral_saturation(NEUTRAL_MAX_SATURATION * 0.6, depth),
         ),
     };
     let saturation = saturation.min(NEUTRAL_MAX_SATURATION);
@@ -147,6 +148,11 @@ fn blend_lightness_curve(base: &[f32; 8], moody: &[f32; 8], depth: f32) -> [f32;
         result[i] = base[i] + (moody[i] - base[i]) * depth;
     }
     result
+}
+
+fn adjusted_neutral_saturation(base: f32, depth: f32) -> f32 {
+    let scaled = base * (1.0 - depth * NEUTRAL_SAT_DEPTH_FACTOR);
+    scaled.max(0.0)
 }
 
 /// Generates 8 accent colors (base08-base0F) mapped to semantic roles.
@@ -375,5 +381,39 @@ mod tests {
                 MIN_CONTRAST
             );
         }
+    }
+
+    #[test]
+    fn neutral_depth_controls_darkness() {
+        let shallow = generate_neutrals(Variant::Dark, 0.0);
+        let deep = generate_neutrals(Variant::Dark, 1.0);
+        let shallow_l: Hsl = Rgb::from(shallow[0]).into();
+        let deep_l: Hsl = Rgb::from(deep[0]).into();
+        assert!(
+            deep_l.l < shallow_l.l,
+            "Expected deeper neutral depth to lower lightness ({} vs {})",
+            deep_l.l,
+            shallow_l.l
+        );
+    }
+
+    #[test]
+    fn neutral_depth_extreme_matches_expected_hexes() {
+        let config_deep = Base16Config {
+            name: "Depth Test".into(),
+            author: None,
+            variant: Variant::Dark,
+            accent_color: Srgb8::new(97, 175, 239),
+            harmony: HarmonyKind::Triadic,
+            neutral_depth: 1.0,
+        };
+        let scheme = generate_base16_scheme(config_deep.clone());
+        assert_eq!(scheme.colors()[0], Srgb8::new(0x16, 0x16, 0x16));
+        assert_eq!(scheme.colors()[1], Srgb8::new(0x26, 0x26, 0x26));
+
+        let mut config_light = config_deep;
+        config_light.neutral_depth = 0.0;
+        let scheme_light = generate_base16_scheme(config_light);
+        assert_eq!(scheme_light.colors()[0], Srgb8::new(0x4d, 0x4f, 0x53));
     }
 }

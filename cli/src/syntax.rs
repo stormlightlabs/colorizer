@@ -211,6 +211,9 @@ pub fn highlight_code_to_terminal<R: BufRead>(
     let mut highlighter = HighlightLines::new(syntax, theme);
     let mut highlighted_lines = Vec::new();
     let mut max_width = 0;
+    let panel_bg = theme.settings.background.map(color_tuple_from_syntect);
+    let status_bg = theme.settings.line_highlight.map(color_tuple_from_syntect);
+    let status_fg = theme.settings.foreground.map(color_tuple_from_syntect);
 
     for line in reader.lines() {
         let line = line?;
@@ -220,7 +223,7 @@ pub fn highlight_code_to_terminal<R: BufRead>(
             .highlight_line(&line_with_newline, &load_syntax_set())
             .map_err(io::Error::other)?;
 
-        let line_str = render_highlighted_line(&ranges);
+        let line_str = render_highlighted_line(&ranges, panel_bg);
         let visible_width = line.chars().count();
         max_width = max_width.max(visible_width);
         highlighted_lines.push((line_str, visible_width));
@@ -232,6 +235,9 @@ pub fn highlight_code_to_terminal<R: BufRead>(
         file_path,
         theme_name,
         syntax.name.as_str(),
+        panel_bg,
+        status_bg,
+        status_fg,
     );
 
     Ok(())
@@ -245,25 +251,37 @@ pub fn highlight_string_to_terminal(
     let mut highlighter = HighlightLines::new(syntax, theme);
     let mut highlighted_lines = Vec::new();
     let mut max_width = 0;
+    let panel_bg = theme.settings.background.map(color_tuple_from_syntect);
+    let status_bg = theme.settings.line_highlight.map(color_tuple_from_syntect);
+    let status_fg = theme.settings.foreground.map(color_tuple_from_syntect);
 
     for line in LinesWithEndings::from(code) {
         let ranges = highlighter
             .highlight_line(line, &syntax_set)
             .map_err(io::Error::other)?;
 
-        let line_str = render_highlighted_line(&ranges);
+        let line_str = render_highlighted_line(&ranges, panel_bg);
         let visible_width = line.trim_end().chars().count();
         max_width = max_width.max(visible_width);
         highlighted_lines.push((line_str, visible_width));
     }
 
-    draw_code_panel(&highlighted_lines, max_width, None, theme_name, syntax.name.as_str());
+    draw_code_panel(
+        &highlighted_lines,
+        max_width,
+        None,
+        theme_name,
+        syntax.name.as_str(),
+        panel_bg,
+        status_bg,
+        status_fg,
+    );
 
     Ok(())
 }
 
 /// Renders a highlighted line to a String with ANSI codes.
-fn render_highlighted_line(ranges: &[(SyntectStyle, &str)]) -> String {
+fn render_highlighted_line(ranges: &[(SyntectStyle, &str)], panel_bg: Option<(u8, u8, u8)>) -> String {
     let mut result = String::new();
 
     for (style, text) in ranges {
@@ -273,33 +291,26 @@ fn render_highlighted_line(ranges: &[(SyntectStyle, &str)]) -> String {
             continue;
         }
 
-        let output = text_without_newline.truecolor(style.foreground.r, style.foreground.g, style.foreground.b);
+        let mut segment = String::new();
+        segment.push_str(&ansi_fg(style.foreground.r, style.foreground.g, style.foreground.b));
 
-        let formatted = if style.font_style.contains(FontStyle::BOLD) {
-            if style.font_style.contains(FontStyle::ITALIC) {
-                if style.font_style.contains(FontStyle::UNDERLINE) {
-                    format!("{}", output.bold().italic().underline())
-                } else {
-                    format!("{}", output.bold().italic())
-                }
-            } else if style.font_style.contains(FontStyle::UNDERLINE) {
-                format!("{}", output.bold().underline())
-            } else {
-                format!("{}", output.bold())
-            }
-        } else if style.font_style.contains(FontStyle::ITALIC) {
-            if style.font_style.contains(FontStyle::UNDERLINE) {
-                format!("{}", output.italic().underline())
-            } else {
-                format!("{}", output.italic())
-            }
-        } else if style.font_style.contains(FontStyle::UNDERLINE) {
-            format!("{}", output.underline())
-        } else {
-            format!("{output}")
-        };
+        if let Some((bg_r, bg_g, bg_b)) = style_background(style, panel_bg) {
+            segment.push_str(&ansi_bg(bg_r, bg_g, bg_b));
+        }
 
-        result.push_str(&formatted);
+        if style.font_style.contains(FontStyle::BOLD) {
+            segment.push_str("\x1b[1m");
+        }
+        if style.font_style.contains(FontStyle::ITALIC) {
+            segment.push_str("\x1b[3m");
+        }
+        if style.font_style.contains(FontStyle::UNDERLINE) {
+            segment.push_str("\x1b[4m");
+        }
+
+        segment.push_str(text_without_newline);
+        segment.push_str("\x1b[0m");
+        result.push_str(&segment);
     }
 
     result
@@ -308,6 +319,7 @@ fn render_highlighted_line(ranges: &[(SyntectStyle, &str)]) -> String {
 /// Draws a bordered panel around code with a status bar at the bottom.
 fn draw_code_panel(
     lines: &[(String, usize)], max_width: usize, file_path: Option<&str>, theme_name: Option<&str>, language: &str,
+    panel_bg: Option<(u8, u8, u8)>, status_bg: Option<(u8, u8, u8)>, status_fg: Option<(u8, u8, u8)>,
 ) {
     let panel_width = max_width.max(50).min(120);
     let (border_r, border_g, border_b) = PANEL_BORDER_COLOR;
@@ -320,14 +332,22 @@ fn draw_code_panel(
 
         print!("{}", "│ ".truecolor(border_r, border_g, border_b));
         print!("{}", line);
-        println!("{}{}", padding, " │".truecolor(border_r, border_g, border_b));
+
+        if let Some((bg_r, bg_g, bg_b)) = panel_bg {
+            let padded = format!("{}", padding.on_truecolor(bg_r, bg_g, bg_b));
+            println!("{}{}", padded, " │".truecolor(border_r, border_g, border_b));
+        } else {
+            println!("{}{}", padding, " │".truecolor(border_r, border_g, border_b));
+        }
     }
 
     let bottom_border = format!("└{}┘", "─".repeat(panel_width + 2));
     println!("{}", bottom_border.truecolor(border_r, border_g, border_b));
 
-    let (status_bg_r, status_bg_g, status_bg_b) = STATUS_BAR_BG;
-    let (status_fg_r, status_fg_g, status_fg_b) = STATUS_BAR_FG;
+    let (status_bg_r, status_bg_g, status_bg_b) = status_bg.unwrap_or(STATUS_BAR_BG);
+    let status_fg_from_theme = status_fg.unwrap_or(STATUS_BAR_FG);
+    let (status_fg_r, status_fg_g, status_fg_b) =
+        pick_contrasting_text(status_bg.unwrap_or(STATUS_BAR_BG), status_fg_from_theme);
 
     let file_info = file_path.unwrap_or("stdin");
     let theme_info = theme_name.unwrap_or("custom");
@@ -348,6 +368,35 @@ fn draw_code_panel(
             .on_truecolor(status_bg_r, status_bg_g, status_bg_b)
             .truecolor(status_fg_r, status_fg_g, status_fg_b)
     );
+}
+
+fn color_tuple_from_syntect(color: Color) -> (u8, u8, u8) {
+    (color.r, color.g, color.b)
+}
+
+fn pick_contrasting_text(bg: (u8, u8, u8), preferred: (u8, u8, u8)) -> (u8, u8, u8) {
+    if is_light(Srgb8::new(bg.0, bg.1, bg.2)) {
+        if is_light(Srgb8::new(preferred.0, preferred.1, preferred.2)) { (0, 0, 0) } else { preferred }
+    } else if !is_light(Srgb8::new(preferred.0, preferred.1, preferred.2)) {
+        (255, 255, 255)
+    } else {
+        preferred
+    }
+}
+
+fn ansi_fg(r: u8, g: u8, b: u8) -> String {
+    format!("\x1b[38;2;{r};{g};{b}m")
+}
+
+fn ansi_bg(r: u8, g: u8, b: u8) -> String {
+    format!("\x1b[48;2;{r};{g};{b}m")
+}
+fn style_background(style: &SyntectStyle, panel_bg: Option<(u8, u8, u8)>) -> Option<(u8, u8, u8)> {
+    if style.background.a > 0 && (style.background.r != 0 || style.background.g != 0 || style.background.b != 0) {
+        Some((style.background.r, style.background.g, style.background.b))
+    } else {
+        panel_bg
+    }
 }
 
 /// Loads the extended syntax set with support for 100+ languages including TypeScript and Elm.

@@ -32,7 +32,7 @@ pub struct GoldenHue {
 }
 
 impl GoldenHue {
-    /// Creates a new generator with the provided seed fraction (0–1).
+    /// Creates a new generator with the provided seed fraction (0-1).
     pub fn new(seed: f32) -> Self {
         Self { h: wrap_unit_interval(seed) }
     }

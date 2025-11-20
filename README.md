@@ -1,5 +1,40 @@
 # Colorizer.rs
 
+Colorizer.rs is a command line tool for generating & previewing color palettes and semantic color schemes (Base16/Base24) from a single accent color. It supports various strategies for palette generation like harmony-based derivation & random sampling (golden ratio, Poisson-disk, uniform).
+
+Scheme previews can be rendered as images or terminal output, validated against WCAG contrast ratios, and/or generate Vim colorschemes.
+It also includes a "demo" mode to preview syntax-highlighted code samples using the generated palettes.
+
+## Features
+
+- **Vim Integration**
+    - Generate Vim colorschemes directly from computed or YAML-based palettes.
+    - Optionally update an existing `vimrc` (injecting or switching `colorscheme`) or emit a standalone colorscheme file.
+- **Terminal & Code Demos**
+    - Use `syntect` for syntax-highlighted code samples driven by your generated palette.
+    - Render colored output in the terminal with `owo-colors` truecolor styling.
+    - "Demo" mode to quickly preview how a palette feels on real code and in terminal UI.
+
+### Palettes
+
+- **Generation**
+    - Generate color palettes from one or more input colors.
+    - Support for deterministic harmonies (e.g., complementary, triadic) and fully random palettes.
+    - Load Base16 and Base24 palettes from YAML and convert them into internal palettes.
+- **Visualization**
+    - Render palette previews as images with vertical color bars.
+    - Automatically choose white or black text on each bar for optimal readability.
+    - Export high-resolution PNGs suitable for docs, theming previews, or social media.
+
+### Schemes
+
+- **Base16/Base24 generation**
+    - Produce semantic schemes directly from a single accent color and a harmony strategy.
+    - Neutral bases (`base00`-`base07`) are clamped to a maximum of 10% saturation so that backgrounds stay truly neutral.
+    - Dial in the overall neutral depth (`--neutral-depth 0-1`) to match bright, moody, or in-between baseline ramps without editing YAML by hand
+      (e.g., Oxocarbon Dark ≈ 1.0, Catppuccin Mocha ≈ 0.85, Frappe ≈ 0.7, Macchiato ≈ 0.6).
+    - CLI validation checks imported schemes with the same ceiling, warning when backgrounds creep past the neutral limit.
+
 ## Quickstart
 
 1. Install the CLI straight from the repo:
@@ -8,7 +43,9 @@
     cargo install colorizer --git https://github.com/stormlightlabs/colorizer
     ```
 
-2. Sample candidate accent colors with the randomizer (golden for quick results, Poisson when you want stricter spacing). Pick your favorite hex for the next steps:
+2. Sample candidate accent colors with the randomizer (golden for quick results, Poisson when you want stricter spacing).
+
+   Pick your preferred hex for the next steps:
 
     ```bash
     colorizer palette random --method golden --count 5 --format hex
@@ -37,7 +74,8 @@
       --output demo-light.yml
     ```
 
-    > Tip: Use `--neutral-depth` to shift between classic bright backgrounds (`0.0`) and the moodier defaults (`1.0`). For reference: Oxocarbon Dark ≈ `1.0`, Catppuccin Mocha ≈ `0.85`, Frappe ≈ `0.7`, and Macchiato ≈ `0.6`.
+    > Tip: Use `--neutral-depth` to shift between classic bright backgrounds (`0.0`) and the moodier defaults (`1.0`).
+    > See *[concepts](./docs/src/concepts.md)* for ready-made values (Oxocarbon, Catppuccin, etc.).
 
 5. Validate both YAML files to confirm neutral saturation and WCAG contrast targets:
 
@@ -75,32 +113,4 @@
     | -------------------- | -------------------- |
     | **add image here**   | **add image here**   |
 
-## Features
-
-- **Vim Integration**
-    - Generate Vim colorschemes directly from computed or YAML-based palettes.
-    - Optionally update an existing `vimrc` (injecting or switching `colorscheme`) or emit a standalone colorscheme file.
-
-- **Terminal & Code Demos**
-    - Use `syntect` for syntax-highlighted code samples driven by your generated palette.
-    - Render colored output in the terminal with `owo-colors` truecolor styling.
-    - "Demo" mode to quickly preview how a palette feels on real code and in terminal UI.
-
-### Palettes
-
-- **Generation**
-    - Generate color palettes from one or more input colors.
-    - Support for deterministic harmonies (e.g., complementary, triadic) and fully random palettes.
-    - Load Base16 and Base24 palettes from YAML and convert them into internal palettes.
-- **Visualization**
-    - Render palette previews as images with vertical color bars.
-    - Automatically choose white or black text on each bar for optimal readability.
-    - Export high-resolution PNGs suitable for docs, theming previews, or social media.
-
-### Schemes
-
-- **Base16/Base24 generation**
-    - Produce semantic schemes directly from a single accent color and a harmony strategy.
-    - Neutral bases (`base00`-`base07`) are clamped to a maximum of 10% saturation so that backgrounds stay truly neutral.
-    - Dial in the overall neutral depth (`--neutral-depth 0-1`) to match bright, moody, or in-between baseline ramps without editing YAML by hand (e.g., Oxocarbon Dark ≈ 1.0, Catppuccin Mocha ≈ 0.85, Frappe ≈ 0.7, Macchiato ≈ 0.6).
-    - CLI validation checks imported schemes with the same ceiling, warning when backgrounds creep past the neutral limit.
+For deeper dives into harmonies, neutral depth values, and randomization strategies, see *[concepts](./docs/src/concepts.md)*.

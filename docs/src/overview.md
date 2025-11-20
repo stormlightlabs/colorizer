@@ -7,10 +7,10 @@ The `colorizer` CLI bundles together color generation, palette filtering, and vi
 Install the CLI directly from the Git repository (no crates.io release yet):
 
 ```bash
-cargo install colorizer --git https://github.com/stormlightlabs/colorizer --branch main
+cargo install colorizer --git https://github.com/stormlightlabs/colorizer
+# or (if cloned)
+cargo install colorizer --path cli/
 ```
-
-This compiles the `colorizer` binary and places it in your Cargo bin directory (`~/.cargo/bin` by default).
 
 ## Quickstart
 
@@ -32,7 +32,7 @@ This compiles the `colorizer` binary and places it in your Cargo bin directory (
       --output demo-dark.yml
     ```
 
-    Tip: pass `--neutral-depth 0.0` for classic bright neutrals, `1.0` for the moodier defaults, or anything in between (Oxocarbon Dark ≈ 1.0, Catppuccin Mocha ≈ 0.85, Frappe ≈ 0.7, Macchiato ≈ 0.6).
+    Tip: pass `--neutral-depth 0.0` for classic bright neutrals or `1.0` for the moodier defaults. See [Concepts](./concepts.md) for ready-made values (Oxocarbon, Catppuccin, etc.).
 
 3. Generate the matching light scheme:
 
@@ -67,6 +67,8 @@ This compiles the `colorizer` binary and places it in your Cargo bin directory (
     colorizer demo code --theme-yaml demo-dark.yml --language rust --file examples/languages/sample.rs
     colorizer demo code --theme-yaml demo-light.yml --language rust --file examples/languages/sample.rs
     ```
+
+Looking for tuning tips? Check [Concepts](./concepts.md) for a deeper explanation of harmonies, randomizers, and neutral-depth presets.
 
 ## Generate Palettes
 

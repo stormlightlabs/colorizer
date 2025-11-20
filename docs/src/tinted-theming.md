@@ -81,7 +81,12 @@ Source: <https://github.com/tinted-theming/base24/>
 
 Note: The colors `base00` through `base05` are typically neutral. The colors from `base08` and up are typically more colorful, and give the color scheme a distinctive "look".
 
-Colorizer enforces this guideline automatically: when building schemes, `base00` through `base07` are clamped to a maximum saturation of 0.10 so that backgrounds stay gray even if the seed accent is vibrant. The CLI also exposes `--neutral-depth` (0–1) so you can interpolate between the classic Base16 lightness ramp and the darker defaults shipped in `examples/`—think Oxocarbon Dark ≈ 1.0, Catppuccin Mocha ≈ 0.85, Frappe ≈ 0.7, and Macchiato ≈ 0.6.
+Colorizer enforces this guideline automatically: when building schemes, `base00` through `base07` are clamped to a maximum saturation of 0.10 so that backgrounds stay gray even if the seed accent is vibrant. The CLI also exposes `--neutral-depth` (0-1) so you can interpolate between the classic Base16 lightness ramp and the darker defaults shipped in `examples/`—think Oxocarbon Dark ≈ 1.0, Catppuccin Mocha ≈ 0.85, Frappe ≈ 0.7, and Macchiato ≈ 0.6.
+
+Other useful knobs:
+
+- `--harmony` decides how accent hues are distributed (analogous, complementary, triadic, tetradic, etc.).
+- `palette random --method (golden|poisson|uniform)` lets you pick accent seeds before turning them into Base16/Base24 schemes.
 
 Note: **Bright** colors can have a higher luminosity relative to its non-bright counterpart. Conventionally, the luminosity can be determined by looking at the `L` value in the `HSL` color space (for the best accuracy, [`OKHSL`/`OKHSV`](https://bottosson.github.io/misc/colorpicker) is recommended).
 Bright colors can also have increased saturation for stronger emphasis, but this is not a hard requirement.
