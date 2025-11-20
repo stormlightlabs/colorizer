@@ -8,4 +8,4 @@ mod random;
 mod shades;
 mod tinted_theming;
 mod vimrc;
-mod wcag;
+pub mod wcag;
