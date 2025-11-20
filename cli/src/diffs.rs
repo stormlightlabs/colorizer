@@ -5,8 +5,8 @@
 //! - ΔE76 (Euclidean distance)
 //! - ΔE94 (graphics/textiles variants)
 //! - ΔE2000 (CIEDE2000)
-//! Supporting helpers for "just noticeable difference" checks and enforcing a
-//! minimum perceptual spacing within color collections.
+//!
+//! Supporting helpers for "just noticeable difference" checks and enforcing a minimum perceptual spacing within color collections.
 
 use crate::colors::{Lab, wrap_degrees};
 
