@@ -180,37 +180,20 @@ fn main() {
 
     match cli.command {
         Commands::Palette { action } => handle_palette(action),
-        Commands::Image {
-            colors,
-            scheme_yaml,
-            out,
-            width,
-            height,
-            label,
-        } => handle_image(colors, scheme_yaml, out, width, height, label),
-        Commands::VimScheme {
-            scheme_yaml,
-            name,
-            output_colors,
-            update_vimrc,
-        } => handle_vim_scheme(scheme_yaml, name, output_colors, update_vimrc),
+        Commands::Image { colors, scheme_yaml, out, width, height, label } => {
+            handle_image(colors, scheme_yaml, out, width, height, label)
+        }
+        Commands::VimScheme { scheme_yaml, name, output_colors, update_vimrc } => {
+            handle_vim_scheme(scheme_yaml, name, output_colors, update_vimrc)
+        }
         Commands::Demo { demo_type } => handle_demo(demo_type),
     }
 }
 
 fn handle_palette(action: PaletteAction) {
     match action {
-        PaletteAction::FromBase {
-            base,
-            harmony,
-            count,
-            min_contrast,
-            background,
-            format,
-        } => {
-            println!(
-                "Generating palette from base {base} with {harmony} harmony"
-            );
+        PaletteAction::FromBase { base, harmony, count, min_contrast, background, format } => {
+            println!("Generating palette from base {base} with {harmony} harmony");
             println!("Count: {count}, Format: {format}");
             if let Some(contrast) = min_contrast {
                 println!("Minimum contrast: {contrast}");
@@ -219,13 +202,7 @@ fn handle_palette(action: PaletteAction) {
                 println!("Background: {bg}");
             }
         }
-        PaletteAction::Random {
-            count,
-            method,
-            min_delta_e,
-            theme,
-            format,
-        } => {
+        PaletteAction::Random { count, method, min_delta_e, theme, format } => {
             println!("Generating {count} random colors using {method} method");
             if let Some(delta_e) = min_delta_e {
                 println!("Minimum Delta E: {delta_e}");
@@ -235,17 +212,11 @@ fn handle_palette(action: PaletteAction) {
             }
             println!("Format: {format}");
         }
-        PaletteAction::Base16 {
-            scheme_yaml,
-            format,
-        } => {
+        PaletteAction::Base16 { scheme_yaml, format } => {
             println!("Exporting Base16 palette from {scheme_yaml}");
             println!("Format: {format}");
         }
-        PaletteAction::Base24 {
-            scheme_yaml,
-            format,
-        } => {
+        PaletteAction::Base24 { scheme_yaml, format } => {
             println!("Exporting Base24 palette from {scheme_yaml}");
             println!("Format: {format}");
         }
@@ -253,11 +224,7 @@ fn handle_palette(action: PaletteAction) {
 }
 
 fn handle_image(
-    colors: Option<String>,
-    scheme_yaml: Option<String>,
-    out: String,
-    width: Option<u32>,
-    height: Option<u32>,
+    colors: Option<String>, scheme_yaml: Option<String>, out: String, width: Option<u32>, height: Option<u32>,
     label: String,
 ) {
     println!("Generating palette image: {out}");
@@ -276,12 +243,7 @@ fn handle_image(
     println!("Label style: {label}");
 }
 
-fn handle_vim_scheme(
-    scheme_yaml: String,
-    name: String,
-    output_colors: String,
-    update_vimrc: Option<String>,
-) {
+fn handle_vim_scheme(scheme_yaml: String, name: String, output_colors: String, update_vimrc: Option<String>) {
     println!("Generating Vim colorscheme '{name}'");
     println!("Scheme: {scheme_yaml}");
     println!("Output directory: {output_colors}");
@@ -292,10 +254,7 @@ fn handle_vim_scheme(
 
 fn handle_demo(demo_type: DemoType) {
     match demo_type {
-        DemoType::Palette {
-            colors,
-            scheme_yaml,
-        } => {
+        DemoType::Palette { colors, scheme_yaml } => {
             println!("Displaying palette in terminal");
             if let Some(c) = colors {
                 println!("Colors: {c}");
@@ -304,13 +263,7 @@ fn handle_demo(demo_type: DemoType) {
                 println!("Scheme: {s}");
             }
         }
-        DemoType::Code {
-            language,
-            theme_yaml,
-            base,
-            harmony,
-            file,
-        } => {
+        DemoType::Code { language, theme_yaml, base, harmony, file } => {
             println!("Highlighting code in {language}");
             if let Some(t) = theme_yaml {
                 println!("Theme: {t}");

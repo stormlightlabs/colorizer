@@ -22,11 +22,25 @@ pub struct Rgb {
 impl Rgb {
     /// Creates a new linear RGB color, clamping components to [0, 1].
     pub fn new(r: f32, g: f32, b: f32) -> Self {
-        Self {
-            r: clamp01(r),
-            g: clamp01(g),
-            b: clamp01(b),
-        }
+        Self { r: clamp01(r), g: clamp01(g), b: clamp01(b) }
+    }
+}
+
+/// sRGB color with float components in [0, 1] range (gamma-corrected).
+///
+/// This represents gamma-corrected sRGB color space with floating-point precision.
+/// Values are gamma-corrected for display but represented as floats for precision during calculations.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Srgb {
+    pub r: f32,
+    pub g: f32,
+    pub b: f32,
+}
+
+impl Srgb {
+    /// Creates a new sRGB float color, clamping components to [0, 1].
+    pub fn new(r: f32, g: f32, b: f32) -> Self {
+        Self { r: clamp01(r), g: clamp01(g), b: clamp01(b) }
     }
 }
 
@@ -91,11 +105,7 @@ impl Hsl {
     ///
     /// Hue is wrapped to [0, 360) and saturation/lightness are clamped to [0, 1].
     pub fn new(h: f32, s: f32, l: f32) -> Self {
-        Self {
-            h: wrap_degrees(h),
-            s: clamp01(s),
-            l: clamp01(l),
-        }
+        Self { h: wrap_degrees(h), s: clamp01(s), l: clamp01(l) }
     }
 }
 
@@ -117,11 +127,7 @@ impl Hsv {
     ///
     /// Hue is wrapped to [0, 360) and saturation/value are clamped to [0, 1].
     pub fn new(h: f32, s: f32, v: f32) -> Self {
-        Self {
-            h: wrap_degrees(h),
-            s: clamp01(s),
-            v: clamp01(v),
-        }
+        Self { h: wrap_degrees(h), s: clamp01(s), v: clamp01(v) }
     }
 }
 
@@ -172,11 +178,28 @@ impl Lch {
     /// Hue is wrapped to [0, 360).
     /// L and C are not clamped to allow for out-of-gamut colors that may be brought into gamut later.
     pub fn new(l: f32, c: f32, h: f32) -> Self {
-        Self {
-            l,
-            c,
-            h: wrap_degrees(h),
-        }
+        Self { l, c, h: wrap_degrees(h) }
+    }
+}
+
+/// CIE XYZ color representation (device-independent).
+///
+/// Intermediate color space used for conversions between RGB and Lab.
+/// Based on the CIE 1931 color space with D65 illuminant (standard daylight).
+/// - `x`, `y`, `z` are tristimulus values typically in [0, 1] for standard colors
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Xyz {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+}
+
+impl Xyz {
+    /// Creates a new XYZ color.
+    ///
+    /// No clamping is performed as XYZ values can exceed [0, 1] for very bright or saturated colors.
+    pub const fn new(x: f32, y: f32, z: f32) -> Self {
+        Self { x, y, z }
     }
 }
 
