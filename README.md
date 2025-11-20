@@ -8,30 +8,72 @@
     cargo install colorizer --git https://github.com/stormlightlabs/colorizer
     ```
 
-2. Generate a golden-ratio palette and print it as hex:
+2. Sample candidate accent colors with the randomizer (golden for quick results, Poisson when you want stricter spacing). Pick your favorite hex for the next steps:
 
     ```bash
-    colorizer palette random --method golden --count 6 --format hex
+    colorizer palette random --method golden --count 5 --format hex
+    colorizer palette random --method poisson --count 6 --min-delta-e 8 --format hex
     ```
 
-3. Render it as an image:
+3. Generate a dark Base16 scheme from the chosen accent (neutrals stay ≤10% saturation so backgrounds remain gray):
 
     ```bash
-    colorizer image --colors "#bf616a,#d08770,#ebcb8b,#a3be8c,#b48ead" --output palette.png --label hex
+    colorizer scheme generate base16 \
+      --name "Demo Dark" \
+      --accent "#61afef" \
+      --variant dark \
+      --harmony triadic \
+      --output demo-dark.yml
     ```
 
-    ![Nord Aurora](./examples/images/nord-aurora.png)
-
-4. Preview syntax highlighting in your terminal:
+4. Generate the matching light scheme from the same accent:
 
     ```bash
-    colorizer demo code --theme-yaml examples/base16/oxocarbon-dark.yml --file examples/languages/sample.rs
-    colorizer demo code --theme-yaml examples/base16/oxocarbon-dark.yml --file examples/languages/sample.elm
+    colorizer scheme generate base16 \
+      --name "Demo Light" \
+      --accent "#61afef" \
+      --variant light \
+      --harmony triadic \
+      --output demo-light.yml
     ```
 
-    | Rust                                                              | Elm                                                               |
-    | ----------------------------------------------------------------- | ----------------------------------------------------------------- |
-    | ![Rust + Oxocarbon Code Demo](./examples/images/syntax-hl-rs.png) | ![Elm + Oxocarbon Code Demo](./examples/images/syntax-hl-elm.png) |
+    > Tip: Use `--neutral-depth` to shift between classic bright backgrounds (`0.0`) and the moodier defaults (`1.0`). For reference: Oxocarbon Dark ≈ `1.0`, Catppuccin Mocha ≈ `0.85`, Frappe ≈ `0.7`, and Macchiato ≈ `0.6`.
+
+5. Validate both YAML files to confirm neutral saturation and WCAG contrast targets:
+
+    ```bash
+    colorizer scheme validate demo-dark.yml
+    colorizer scheme validate demo-light.yml
+    ```
+
+6. Render each scheme as an image (swap filenames as needed), then drop screenshots where indicated:
+
+    ```bash
+    colorizer scheme show demo-dark.yml --format image --output demo-dark.png
+    colorizer scheme show demo-light.yml --format image --output demo-light.png
+    ```
+
+    **add image here** (dark)
+
+    **add image here** (light)
+
+7. Display both schemes in your terminal to sanity-check ordering and contrast:
+
+    ```bash
+    colorizer scheme show demo-dark.yml --format terminal
+    colorizer scheme show demo-light.yml --format terminal
+    ```
+
+8. Preview syntax highlighting driven by the same schemes (swap files/languages as needed):
+
+    ```bash
+    colorizer demo code --theme-yaml demo-dark.yml --file examples/languages/sample.rs
+    colorizer demo code --theme-yaml demo-light.yml --file examples/languages/sample.rs
+    ```
+
+    | Rust (dark)          | Rust (light)         |
+    | -------------------- | -------------------- |
+    | **add image here**   | **add image here**   |
 
 ## Features
 
@@ -54,3 +96,11 @@
     - Render palette previews as images with vertical color bars.
     - Automatically choose white or black text on each bar for optimal readability.
     - Export high-resolution PNGs suitable for docs, theming previews, or social media.
+
+### Schemes
+
+- **Base16/Base24 generation**
+    - Produce semantic schemes directly from a single accent color and a harmony strategy.
+    - Neutral bases (`base00`-`base07`) are clamped to a maximum of 10% saturation so that backgrounds stay truly neutral.
+    - Dial in the overall neutral depth (`--neutral-depth 0-1`) to match bright, moody, or in-between baseline ramps without editing YAML by hand (e.g., Oxocarbon Dark ≈ 1.0, Catppuccin Mocha ≈ 0.85, Frappe ≈ 0.7, Macchiato ≈ 0.6).
+    - CLI validation checks imported schemes with the same ceiling, warning when backgrounds creep past the neutral limit.

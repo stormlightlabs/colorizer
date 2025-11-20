@@ -4,6 +4,7 @@ use std::ops::Range;
 mod conversions;
 mod vimrc;
 
+pub mod base16_builder;
 pub mod colors;
 pub mod diffs;
 pub mod palette;

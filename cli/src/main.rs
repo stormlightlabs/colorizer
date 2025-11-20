@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
 use colorizer::{
     HarmonyKind,
+    base16_builder::{self, Base16Config, Base24Config, Variant},
     colors::Srgb8,
     palette::{PaletteLabelStyle, golden_ratio_palette, palette_from_base, palette_to_image},
     random::{self, PaletteConstraints, PoissonConfig},
@@ -11,9 +12,11 @@ use std::fs::File;
 use std::io::{self, BufReader, Read};
 use std::ops::Range;
 
+const NEUTRAL_SATURATION_TOLERANCE: f32 = 0.02;
+
 #[derive(Parser)]
 #[command(name = "colorizer")]
-#[command(about = "Color palette generation and manipulation tool", long_about = None)]
+#[command(about = "Generate color schemes and palettes with semantic Base16/Base24 support", long_about = None)]
 #[command(version)]
 struct Cli {
     #[command(subcommand)]
@@ -22,7 +25,13 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Generate and manipulate color palettes
+    /// Generate, validate, and visualize Base16/Base24 color schemes
+    #[command(visible_alias = "s")]
+    Scheme {
+        #[command(subcommand)]
+        action: SchemeAction,
+    },
+    /// Generate color palettes (use 'scheme' for Base16/Base24 generation)
     Palette {
         #[command(subcommand)]
         action: PaletteAction,
@@ -32,27 +41,21 @@ enum Commands {
         /// Color values as hex codes (comma-separated, e.g., "#ff0000,#00ff00,#0000ff")
         #[arg(long, conflicts_with = "scheme_yaml")]
         colors: Option<String>,
-
         /// Base16/Base24 scheme YAML file
         #[arg(long, conflicts_with = "colors")]
         scheme_yaml: Option<String>,
-
         /// Output image file path
         #[arg(short, long, default_value = "palette.png")]
         out: String,
-
         /// Image width in pixels
         #[arg(long)]
         width: Option<u32>,
-
         /// Image height in pixels
         #[arg(long)]
         height: Option<u32>,
-
         /// Label style for color bars
         #[arg(long, value_parser = ["hex", "base16", "index", "none"], default_value = "index")]
         label: String,
-
         /// Show palette in terminal after generating image
         #[arg(long)]
         viz: bool,
@@ -62,15 +65,12 @@ enum Commands {
         /// Base16/Base24 scheme YAML file
         #[arg(long)]
         scheme_yaml: String,
-
         /// Name for the colorscheme
         #[arg(long)]
         name: String,
-
         /// Output directory for colors/<name>.vim
         #[arg(long)]
         output_colors: String,
-
         /// Optional: update .vimrc with the new colorscheme
         #[arg(long)]
         update_vimrc: Option<String>,
@@ -83,29 +83,85 @@ enum Commands {
 }
 
 #[derive(Subcommand)]
+enum SchemeAction {
+    /// Generate a Base16 or Base24 color scheme from a single accent color
+    #[command(visible_alias = "gen")]
+    Generate {
+        /// Scheme format (base16 or base24)
+        #[arg(value_parser = ["base16", "base24"])]
+        format: String,
+        /// Scheme name
+        #[arg(long)]
+        name: String,
+        /// Author name (optional)
+        #[arg(long)]
+        author: Option<String>,
+        /// Theme variant: dark or light
+        #[arg(long, value_parser = ["dark", "light"], default_value = "dark")]
+        variant: String,
+        /// Accent color as hex (e.g., "#ff5500")
+        #[arg(long)]
+        accent: String,
+        /// Color harmony for accent generation
+        #[arg(long, value_parser = ["complementary", "split-complementary", "analogous", "triadic", "tetradic", "square"], default_value = "triadic")]
+        harmony: String,
+        /// Neutral darkness (0 = classic bright neutrals, 1 = moody/dark neutrals)
+        #[arg(long, default_value_t = base16_builder::DEFAULT_NEUTRAL_DEPTH)]
+        neutral_depth: f32,
+        /// Output YAML file path (defaults to <name>.yml)
+        #[arg(long, short)]
+        output: Option<String>,
+    },
+    /// Visualize a scheme (terminal preview, image, or syntax demo)
+    #[command(visible_alias = "preview")]
+    Show {
+        /// Base16/Base24 scheme YAML file
+        scheme: String,
+        /// Output format
+        #[arg(long, value_parser = ["terminal", "image"], default_value = "terminal")]
+        format: String,
+        /// Output file path (required for 'image' format)
+        #[arg(long, short)]
+        output: Option<String>,
+        /// Image width in pixels (for image format)
+        #[arg(long, default_value = "960")]
+        width: u32,
+        /// Image height in pixels (for image format)
+        #[arg(long, default_value = "320")]
+        height: u32,
+        /// Show syntax-highlighted code demo
+        #[arg(long)]
+        demo: Option<String>,
+        /// Code file for syntax demo
+        #[arg(long, requires = "demo")]
+        file: Option<String>,
+    },
+    /// Validate a scheme (contrast, neutrals, color roles)
+    Validate {
+        /// Base16/Base24 scheme YAML file
+        scheme: String,
+    },
+}
+
+#[derive(Subcommand)]
 enum PaletteAction {
     /// Generate palette from a base color using color harmonies
     FromBase {
         /// Base color as hex code (e.g., "#ff5500")
         #[arg(long)]
         base: String,
-
         /// Harmony type to generate
         #[arg(long, value_parser = ["complementary", "split-complementary", "analogous", "triadic", "tetradic", "square"])]
         harmony: String,
-
         /// Number of colors to generate
         #[arg(long, default_value = "5")]
         count: usize,
-
         /// Minimum contrast ratio against background (optional)
         #[arg(long)]
         min_contrast: Option<f32>,
-
         /// Background color for contrast checking (optional)
         #[arg(long)]
         background: Option<String>,
-
         /// Output format
         #[arg(long, value_parser = ["json", "yaml", "hex"], default_value = "hex")]
         format: String,
@@ -115,19 +171,15 @@ enum PaletteAction {
         /// Number of colors to generate
         #[arg(long, default_value = "5")]
         count: usize,
-
         /// Generation method
         #[arg(long, value_parser = ["uniform", "golden", "poisson"], default_value = "golden")]
         method: String,
-
         /// Minimum color difference (Delta E)
         #[arg(long)]
         min_delta_e: Option<f32>,
-
         /// Theme preference
         #[arg(long, value_parser = ["light", "dark"])]
         theme: Option<String>,
-
         /// Output format
         #[arg(long, value_parser = ["json", "yaml", "hex"], default_value = "hex")]
         format: String,
@@ -137,7 +189,6 @@ enum PaletteAction {
         /// Base16 scheme YAML file
         #[arg(long)]
         scheme_yaml: String,
-
         /// Output format
         #[arg(long, value_parser = ["json", "yaml", "hex"], default_value = "hex")]
         format: String,
@@ -147,7 +198,6 @@ enum PaletteAction {
         /// Base24 scheme YAML file
         #[arg(long)]
         scheme_yaml: String,
-
         /// Output format
         #[arg(long, value_parser = ["json", "yaml", "hex"], default_value = "hex")]
         format: String,
@@ -161,7 +211,6 @@ enum DemoType {
         /// Color values as hex codes (comma-separated)
         #[arg(long, conflicts_with = "scheme_yaml")]
         colors: Option<String>,
-
         /// Base16/Base24 scheme YAML file
         #[arg(long, conflicts_with = "colors")]
         scheme_yaml: Option<String>,
@@ -171,19 +220,15 @@ enum DemoType {
         /// Programming language
         #[arg(long, default_value = "rust")]
         language: String,
-
         /// Base16/Base24 scheme YAML file
         #[arg(long, conflicts_with = "base")]
         theme_yaml: Option<String>,
-
         /// Base color for theme generation
         #[arg(long, conflicts_with = "theme_yaml")]
         base: Option<String>,
-
         /// Harmony type (when using --base)
         #[arg(long, requires = "base")]
         harmony: Option<String>,
-
         /// Source code file to highlight (reads from stdin if not provided)
         #[arg(long)]
         file: Option<String>,
@@ -194,6 +239,7 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
+        Commands::Scheme { action } => handle_scheme(action),
         Commands::Palette { action } => handle_palette(action),
         Commands::Image { colors, scheme_yaml, out, width, height, label, viz } => {
             handle_image(colors, scheme_yaml, out, width, height, label, viz)
@@ -202,6 +248,233 @@ fn main() {
             handle_vim_scheme(scheme_yaml, name, output_colors, update_vimrc)
         }
         Commands::Demo { demo_type } => handle_demo(demo_type),
+    }
+}
+
+fn handle_scheme(action: SchemeAction) {
+    match action {
+        SchemeAction::Generate { format, name, author, variant, accent, harmony, neutral_depth, output } => {
+            let accent_color = match parse_hex_color(&accent) {
+                Ok(color) => color,
+                Err(err) => {
+                    eprintln!("{err}");
+                    return;
+                }
+            };
+
+            let variant = match variant.as_str() {
+                "dark" => Variant::Dark,
+                "light" => Variant::Light,
+                _ => {
+                    eprintln!("Invalid variant: {variant}");
+                    return;
+                }
+            };
+
+            let harmony_kind = match parse_harmony_kind(&harmony) {
+                Some(kind) => kind,
+                None => {
+                    eprintln!("Unsupported harmony: {harmony}");
+                    return;
+                }
+            };
+
+            let output_path = output.unwrap_or_else(|| {
+                let sanitized = name.to_lowercase().replace(' ', "-");
+                format!("{sanitized}.yml")
+            });
+            let neutral_depth = neutral_depth.clamp(0.0, 1.0);
+
+            match format.as_str() {
+                "base16" => {
+                    let config =
+                        Base16Config { name, author, variant, accent_color, harmony: harmony_kind, neutral_depth };
+                    let scheme = base16_builder::generate_base16_scheme(config);
+
+                    if let Err(err) = tinted_theming::write_base16_scheme(&scheme, &output_path) {
+                        eprintln!("Failed to write scheme: {err}");
+                        return;
+                    }
+
+                    println!("Generated Base16 scheme: {}", scheme.metadata.name);
+                    println!("  Variant: {}", scheme.metadata.variant.as_deref().unwrap_or("unknown"));
+                    println!("  Output: {output_path}");
+                    println!("\nPreview:");
+                    syntax::display_palette_in_terminal(scheme.colors(), Some(&base16_labels(16)));
+                }
+                "base24" => {
+                    let config =
+                        Base24Config { name, author, variant, accent_color, harmony: harmony_kind, neutral_depth };
+                    let scheme = base16_builder::generate_base24_scheme(config);
+
+                    if let Err(err) = tinted_theming::write_base24_scheme(&scheme, &output_path) {
+                        eprintln!("Failed to write scheme: {err}");
+                        return;
+                    }
+
+                    println!("Generated Base24 scheme: {}", scheme.metadata.name);
+                    println!("  Variant: {}", scheme.metadata.variant.as_deref().unwrap_or("unknown"));
+                    println!("  Output: {output_path}");
+                    println!("\nPreview:");
+                    syntax::display_palette_in_terminal(scheme.colors(), Some(&base16_labels(24)));
+                }
+                _ => {
+                    eprintln!("Invalid format: {format}");
+                }
+            }
+        }
+        SchemeAction::Show { scheme, format, output, width, height, demo, file } => {
+            let schemes_base16 = tinted_theming::load_base16_schemes(&scheme);
+            let schemes_base24 = tinted_theming::load_base24_schemes(&scheme);
+
+            let (colors, scheme_name) = if let Ok(schemes) = schemes_base16 {
+                (schemes[0].colors().to_vec(), schemes[0].metadata.name.clone())
+            } else if let Ok(schemes) = schemes_base24 {
+                (schemes[0].colors().to_vec(), schemes[0].metadata.name.clone())
+            } else {
+                eprintln!("Failed to load scheme: {scheme}");
+                return;
+            };
+
+            match format.as_str() {
+                "terminal" => {
+                    println!("Scheme: {scheme_name}");
+                    let labels: Vec<String> = (0..colors.len()).map(|i| format!("{i:02X}")).collect();
+                    syntax::display_palette_in_terminal(&colors, Some(&labels));
+
+                    if let Some(lang) = demo {
+                        if let Some(file_path) = file {
+                            println!("\nSyntax demo ({lang}):");
+
+                            let theme = if colors.len() == 16 {
+                                if let Ok(schemes) = tinted_theming::load_base16_schemes(&scheme) {
+                                    syntax::base16_to_theme(&schemes[0])
+                                } else {
+                                    eprintln!("Failed to load Base16 scheme");
+                                    return;
+                                }
+                            } else {
+                                if let Ok(schemes) = tinted_theming::load_base24_schemes(&scheme) {
+                                    syntax::base24_to_theme(&schemes[0])
+                                } else {
+                                    eprintln!("Failed to load Base24 scheme");
+                                    return;
+                                }
+                            };
+
+                            let syntax_set = syntax::load_syntax_set();
+                            if let Some(syntax_ref) = syntax::find_syntax_by_name(&syntax_set, &lang) {
+                                if let Ok(file_handle) = File::open(&file_path) {
+                                    let reader = BufReader::new(file_handle);
+                                    let _ = syntax::highlight_code_to_terminal(
+                                        reader,
+                                        syntax_ref,
+                                        &theme,
+                                        Some(&file_path),
+                                        Some(&scheme_name),
+                                    );
+                                } else {
+                                    eprintln!("Failed to open file: {file_path}");
+                                }
+                            } else {
+                                eprintln!("Unknown language: {lang}");
+                            }
+                        }
+                    }
+                }
+                "image" => {
+                    let output_path = output.unwrap_or_else(|| "scheme.png".to_string());
+                    let labels = base16_labels(colors.len());
+                    let image = palette_to_image(&colors, PaletteLabelStyle::Custom(&labels), (width, height));
+
+                    if let Err(err) = image.save(&output_path) {
+                        eprintln!("Failed to write image: {err}");
+                    } else {
+                        println!("Saved scheme visualization: {output_path}");
+                    }
+                }
+                _ => {
+                    eprintln!("Invalid format: {format}");
+                }
+            }
+        }
+        SchemeAction::Validate { scheme } => {
+            let schemes_base16 = tinted_theming::load_base16_schemes(&scheme);
+            let schemes_base24 = tinted_theming::load_base24_schemes(&scheme);
+
+            let (colors, scheme_name, system) = if let Ok(schemes) = schemes_base16 {
+                (schemes[0].colors().to_vec(), schemes[0].metadata.name.clone(), "Base16")
+            } else if let Ok(schemes) = schemes_base24 {
+                (schemes[0].colors().to_vec(), schemes[0].metadata.name.clone(), "Base24")
+            } else {
+                eprintln!("Failed to load scheme: {scheme}");
+                return;
+            };
+
+            println!("Validating {system} scheme: {scheme_name}");
+            println!();
+
+            let mut issues = 0;
+
+            let expected_count = if system == "Base16" { 16 } else { 24 };
+            if colors.len() != expected_count {
+                println!("  [ERROR] Expected {expected_count} colors, found {}", colors.len());
+                issues += 1;
+            } else {
+                println!("  [OK] Color count: {}", colors.len());
+            }
+
+            let mut high_saturation_neutrals = Vec::new();
+            for (i, &color) in colors.iter().take(8).enumerate() {
+                let hsl: colorizer::colors::Hsl = colorizer::colors::Rgb::from(color).into();
+                if hsl.s > base16_builder::NEUTRAL_MAX_SATURATION + NEUTRAL_SATURATION_TOLERANCE {
+                    high_saturation_neutrals.push((i, hsl.s));
+                }
+            }
+
+            if high_saturation_neutrals.is_empty() {
+                println!("  [OK] Neutrals (base00-base07) have low saturation");
+            } else {
+                println!(
+                    "  [WARN] Some neutrals have high saturation: {}",
+                    high_saturation_neutrals
+                        .iter()
+                        .map(|(i, s)| format!("{i:02X} ({s:.2})"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+
+            let background = colors[0];
+            let mut low_contrast_accents = Vec::new();
+            for (i, &color) in colors.iter().enumerate().skip(8).take(8) {
+                let ratio = colorizer::wcag::contrast_ratio(background, color);
+                if ratio < 4.5 {
+                    low_contrast_accents.push((i, ratio));
+                }
+            }
+
+            if low_contrast_accents.is_empty() {
+                println!("  [OK] All accent colors meet WCAG AA contrast (4.5:1) against base00");
+            } else {
+                println!(
+                    "  [ERROR] Low contrast accents: {}",
+                    low_contrast_accents
+                        .iter()
+                        .map(|(i, r)| format!("{i:02X} ({r:.2}:1)"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+                issues += 1;
+            }
+
+            println!();
+            if issues == 0 {
+                println!("Validation passed with no errors.");
+            } else {
+                println!("Validation found {issues} error(s).");
+            }
+        }
     }
 }
 
@@ -446,8 +719,7 @@ fn handle_demo(demo_type: DemoType) {
                 return;
             };
 
-            let labels: Vec<String> = (0..palette.len()).map(|i| format!("base{i:02X}")).collect();
-
+            let labels: Vec<String> = (0..palette.len()).map(|i| format!("{i:02X}")).collect();
             syntax::display_palette_in_terminal(&palette, Some(&labels));
         }
         DemoType::Code { language, theme_yaml, base, harmony, file } => {

@@ -1,11 +1,12 @@
-//! Base16/Base24 scheme parsing helpers compatible with tinted-theming.
+//! Base16/Base24 scheme parsing and serialization helpers compatible with tinted-theming.
 
 use crate::colors::{Rgb, Srgb8};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 const BASE16_KEYS: [&str; 16] = [
@@ -20,11 +21,13 @@ const BASE24_KEYS: [&str; 24] = [
 ];
 
 /// Metadata shared across scheme formats.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct SchemeMetadata {
     pub system: String,
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub author: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub variant: Option<String>,
 }
 
@@ -70,11 +73,12 @@ impl Base24Scheme {
     }
 }
 
-/// Errors that may occur while loading tinted-theming schemes.
+/// Errors that may occur while loading or writing tinted-theming schemes.
 #[derive(Debug)]
 pub enum SchemeError {
     Io { path: PathBuf, source: std::io::Error },
     Parse { path: PathBuf, source: serde_yml::Error },
+    Serialize { source: serde_yml::Error },
     MissingField(&'static str),
     MissingColor(String),
     InvalidHex { key: String, value: String },
@@ -87,6 +91,7 @@ impl fmt::Display for SchemeError {
         match self {
             SchemeError::Io { path, source } => write!(f, "failed to read {}: {}", path.display(), source),
             SchemeError::Parse { path, source } => write!(f, "failed to parse {}: {}", path.display(), source),
+            SchemeError::Serialize { source } => write!(f, "failed to serialize scheme: {}", source),
             SchemeError::MissingField(field) => write!(f, "scheme is missing required field '{field}'"),
             SchemeError::MissingColor(key) => write!(f, "scheme palette missing '{key}'"),
             SchemeError::InvalidHex { key, value } => {
@@ -202,6 +207,71 @@ fn build_palette(palette: &HashMap<String, String>, keys: &[&str]) -> Result<Vec
 
 fn is_yaml(path: &Path) -> bool {
     matches!(path.extension().and_then(|ext| ext.to_str()), Some(ext) if ext.eq_ignore_ascii_case("yml") || ext.eq_ignore_ascii_case("yaml"))
+}
+
+/// Writes a Base16 scheme to a YAML file in tinted-theming format.
+pub fn write_base16_scheme(scheme: &Base16Scheme, path: impl AsRef<Path>) -> Result<(), SchemeError> {
+    let mut palette = HashMap::new();
+    for (i, &color) in scheme.colors().iter().enumerate() {
+        palette.insert(BASE16_KEYS[i].to_string(), color.to_hex());
+    }
+
+    let output = SchemeYaml {
+        system: scheme.metadata.system.clone(),
+        name: scheme.metadata.name.clone(),
+        author: scheme.metadata.author.clone(),
+        variant: scheme.metadata.variant.clone(),
+        palette,
+    };
+
+    let yaml = serde_yml::to_string(&output).map_err(|source| SchemeError::Serialize { source })?;
+
+    let path_ref = path.as_ref();
+    let mut file = fs::File::create(path_ref)
+        .map_err(|source| SchemeError::Io { path: path_ref.to_path_buf(), source })?;
+
+    file.write_all(yaml.as_bytes())
+        .map_err(|source| SchemeError::Io { path: path_ref.to_path_buf(), source })?;
+
+    Ok(())
+}
+
+/// Writes a Base24 scheme to a YAML file in tinted-theming format.
+pub fn write_base24_scheme(scheme: &Base24Scheme, path: impl AsRef<Path>) -> Result<(), SchemeError> {
+    let mut palette = HashMap::new();
+    for (i, &color) in scheme.colors().iter().enumerate() {
+        palette.insert(BASE24_KEYS[i].to_string(), color.to_hex());
+    }
+
+    let output = SchemeYaml {
+        system: scheme.metadata.system.clone(),
+        name: scheme.metadata.name.clone(),
+        author: scheme.metadata.author.clone(),
+        variant: scheme.metadata.variant.clone(),
+        palette,
+    };
+
+    let yaml = serde_yml::to_string(&output).map_err(|source| SchemeError::Serialize { source })?;
+
+    let path_ref = path.as_ref();
+    let mut file = fs::File::create(path_ref)
+        .map_err(|source| SchemeError::Io { path: path_ref.to_path_buf(), source })?;
+
+    file.write_all(yaml.as_bytes())
+        .map_err(|source| SchemeError::Io { path: path_ref.to_path_buf(), source })?;
+
+    Ok(())
+}
+
+#[derive(Debug, Serialize)]
+struct SchemeYaml {
+    system: String,
+    name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    author: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    variant: Option<String>,
+    palette: HashMap<String, String>,
 }
 
 #[cfg(test)]

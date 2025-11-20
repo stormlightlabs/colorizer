@@ -12,6 +12,62 @@ cargo install colorizer --git https://github.com/stormlightlabs/colorizer --bran
 
 This compiles the `colorizer` binary and places it in your Cargo bin directory (`~/.cargo/bin` by default).
 
+## Quickstart
+
+1. Sample candidate accent colors with the randomizer (golden is ergonomic, Poisson gives stricter spacing). Choose any of the resulting hex codes:
+
+    ```bash
+    colorizer palette random --method golden --count 5 --format hex
+    colorizer palette random --method poisson --count 6 --min-delta-e 8 --format hex
+    ```
+
+2. Generate a dark Base16 scheme from the chosen accent (neutrals remain ≤10% saturation):
+
+    ```bash
+    colorizer scheme generate base16 \
+      --name "Demo Dark" \
+      --accent "#61afef" \
+      --variant dark \
+      --harmony triadic \
+      --output demo-dark.yml
+    ```
+
+    Tip: pass `--neutral-depth 0.0` for classic bright neutrals, `1.0` for the moodier defaults, or anything in between (Oxocarbon Dark ≈ 1.0, Catppuccin Mocha ≈ 0.85, Frappe ≈ 0.7, Macchiato ≈ 0.6).
+
+3. Generate the matching light scheme:
+
+    ```bash
+    colorizer scheme generate base16 \
+      --name "Demo Light" \
+      --accent "#61afef" \
+      --variant light \
+      --harmony triadic \
+      --output demo-light.yml
+    ```
+
+4. Validate both YAML files:
+
+    ```bash
+    colorizer scheme validate demo-dark.yml
+    colorizer scheme validate demo-light.yml
+    ```
+
+5. Render and preview each variant (image + terminal):
+
+    ```bash
+    colorizer scheme show demo-dark.yml --format image --output demo-dark.png
+    colorizer scheme show demo-light.yml --format image --output demo-light.png
+    colorizer scheme show demo-dark.yml --format terminal
+    colorizer scheme show demo-light.yml --format terminal
+    ```
+
+6. Preview syntax highlighting driven by either file:
+
+    ```bash
+    colorizer demo code --theme-yaml demo-dark.yml --language rust --file examples/languages/sample.rs
+    colorizer demo code --theme-yaml demo-light.yml --language rust --file examples/languages/sample.rs
+    ```
+
 ## Generate Palettes
 
 ### Random palettes
