@@ -1,4 +1,4 @@
-mod colors;
+pub mod colors;
 mod conversions;
 mod diffs;
 mod harmonies;
