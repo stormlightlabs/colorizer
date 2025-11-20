@@ -209,7 +209,9 @@ impl Xyz {
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust
+/// use colorizer::colors::wrap_degrees;
+///
 /// assert_eq!(wrap_degrees(370.0), 10.0);
 /// assert_eq!(wrap_degrees(-10.0), 350.0);
 /// ```
@@ -229,6 +231,8 @@ pub fn wrap_degrees(h: f32) -> f32 {
 /// # Examples
 ///
 /// ```
+/// use colorizer::colors::clamp01;
+///
 /// assert_eq!(clamp01(0.5), 0.5);
 /// assert_eq!(clamp01(-0.1), 0.0);
 /// assert_eq!(clamp01(1.5), 1.0);
