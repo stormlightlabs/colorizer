@@ -1,4 +1,4 @@
-//! Palette generation helpers
+//! Palette generation helpers and visualization utilities.
 
 use crate::GoldenPalette;
 use crate::colors::{Hsl, Rgb, Srgb8};
@@ -6,9 +6,23 @@ use crate::diffs::ensure_min_distance;
 use crate::harmonies::{HarmonyKind, harmonies};
 use crate::shades::{darken_hsl, lighten_hsl};
 use crate::wcag::contrast_ratio;
+
+use image::{Rgb as ImgRgb, RgbImage};
+use std::cmp::max;
 use std::ops::Range;
 
 const VARIATION_STEP: f32 = 0.08;
+const FONT_WIDTH: u32 = 5;
+const FONT_HEIGHT: u32 = 7;
+
+/// Label styles supported during palette-to-image rendering.
+#[derive(Debug, Clone, Copy)]
+pub enum PaletteLabelStyle<'a> {
+    Hex,
+    Index,
+    None,
+    Custom(&'a [String]),
+}
 
 /// Generates a palette derived from `base` using the requested harmony.
 ///
@@ -86,6 +100,129 @@ fn filter_by_contrast(colors: Vec<Srgb8>, background: Option<Srgb8>, min_contras
     }
 }
 
+/// Renders the palette into an RGB image with vertical bars and optional labels.
+pub fn palette_to_image<'a>(colors: &[Srgb8], labels: PaletteLabelStyle<'a>, size: (u32, u32)) -> RgbImage {
+    let width = max(size.0, colors.len() as u32).max(1);
+    let height = max(size.1, FONT_HEIGHT + 8);
+    let mut image = RgbImage::from_pixel(width, height, ImgRgb([0, 0, 0]));
+
+    if colors.is_empty() {
+        return image;
+    }
+
+    let label_strings = build_labels(colors, labels);
+    let segments = colors.len() as u32;
+    let mut start_x = 0;
+    let base_width = max(width / segments, 1);
+
+    for (index, &color) in colors.iter().enumerate() {
+        let mut end_x = start_x + base_width;
+        if index == colors.len() - 1 {
+            end_x = width;
+        }
+        fill_bar(&mut image, start_x, end_x, color);
+
+        if let Some(text) = label_strings.get(index) {
+            let text_color = pick_label_color(color);
+            draw_label(&mut image, text, start_x, end_x, text_color);
+        }
+
+        start_x = end_x;
+    }
+
+    image
+}
+
+fn build_labels<'a>(colors: &[Srgb8], labels: PaletteLabelStyle<'a>) -> Vec<String> {
+    match labels {
+        PaletteLabelStyle::None => Vec::new(),
+        PaletteLabelStyle::Hex => colors.iter().map(|c| c.to_hex().to_uppercase()).collect(),
+        PaletteLabelStyle::Index => colors.iter().enumerate().map(|(i, _)| format!("{i:02}")).collect(),
+        PaletteLabelStyle::Custom(values) => colors
+            .iter()
+            .enumerate()
+            .map(|(i, _)| values.get(i).cloned().unwrap_or_default())
+            .collect(),
+    }
+}
+
+fn fill_bar(image: &mut RgbImage, start_x: u32, end_x: u32, color: Srgb8) {
+    for y in 0..image.height() {
+        for x in start_x..end_x {
+            image.put_pixel(x, y, ImgRgb([color.r, color.g, color.b]));
+        }
+    }
+}
+
+fn pick_label_color(bg: Srgb8) -> Srgb8 {
+    let white = Srgb8::new(255, 255, 255);
+    let black = Srgb8::new(0, 0, 0);
+    if contrast_ratio(bg, white) >= contrast_ratio(bg, black) { white } else { black }
+}
+
+fn draw_label(image: &mut RgbImage, text: &str, start_x: u32, end_x: u32, color: Srgb8) {
+    if text.is_empty() {
+        return;
+    }
+
+    let sanitized = text.trim();
+    if sanitized.is_empty() {
+        return;
+    }
+
+    let text_width = sanitized.len() as u32 * (FONT_WIDTH + 1) - 1;
+    let available = end_x.saturating_sub(start_x);
+    let x = start_x + available.saturating_sub(text_width) / 2;
+    let y = image.height().saturating_sub(FONT_HEIGHT + 3);
+
+    draw_text(image, sanitized, x, y, ImgRgb([color.r, color.g, color.b]));
+}
+
+fn draw_text(image: &mut RgbImage, text: &str, mut cursor_x: u32, cursor_y: u32, color: ImgRgb<u8>) {
+    for ch in text.chars() {
+        if let Some(rows) = glyph_for(ch.to_ascii_uppercase()) {
+            for (row_idx, row) in rows.iter().enumerate() {
+                for col in 0..FONT_WIDTH {
+                    if row & (1 << (FONT_WIDTH - 1 - col)) != 0 {
+                        let x = cursor_x + col;
+                        let y = cursor_y + row_idx as u32;
+                        if x < image.width() && y < image.height() {
+                            image.put_pixel(x, y, color);
+                        }
+                    }
+                }
+            }
+            cursor_x += FONT_WIDTH + 1;
+        } else {
+            cursor_x += FONT_WIDTH;
+        }
+    }
+}
+
+fn glyph_for(ch: char) -> Option<&'static [u8; FONT_HEIGHT as usize]> {
+    match ch {
+        '0' => Some(&[0b01110, 0b10001, 0b10011, 0b10101, 0b11001, 0b10001, 0b01110]),
+        '1' => Some(&[0b00100, 0b01100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110]),
+        '2' => Some(&[0b01110, 0b10001, 0b00001, 0b00110, 0b01000, 0b10000, 0b11111]),
+        '3' => Some(&[0b11110, 0b00001, 0b00001, 0b00110, 0b00001, 0b00001, 0b11110]),
+        '4' => Some(&[0b00010, 0b00110, 0b01010, 0b10010, 0b11111, 0b00010, 0b00010]),
+        '5' => Some(&[0b11111, 0b10000, 0b11110, 0b00001, 0b00001, 0b10001, 0b01110]),
+        '6' => Some(&[0b00110, 0b01000, 0b10000, 0b11110, 0b10001, 0b10001, 0b01110]),
+        '7' => Some(&[0b11111, 0b00001, 0b00010, 0b00100, 0b01000, 0b01000, 0b01000]),
+        '8' => Some(&[0b01110, 0b10001, 0b10001, 0b01110, 0b10001, 0b10001, 0b01110]),
+        '9' => Some(&[0b01110, 0b10001, 0b10001, 0b01111, 0b00001, 0b00010, 0b01100]),
+        'A' => Some(&[0b01110, 0b10001, 0b10001, 0b11111, 0b10001, 0b10001, 0b10001]),
+        'B' => Some(&[0b11110, 0b10001, 0b10001, 0b11110, 0b10001, 0b10001, 0b11110]),
+        'C' => Some(&[0b01110, 0b10001, 0b10000, 0b10000, 0b10000, 0b10001, 0b01110]),
+        'D' => Some(&[0b11100, 0b10010, 0b10001, 0b10001, 0b10001, 0b10010, 0b11100]),
+        'E' => Some(&[0b11111, 0b10000, 0b11110, 0b10000, 0b10000, 0b10000, 0b11111]),
+        'F' => Some(&[0b11111, 0b10000, 0b11110, 0b10000, 0b10000, 0b10000, 0b10000]),
+        '#' => Some(&[0b01010, 0b11111, 0b01010, 0b11111, 0b01010, 0b11111, 0b01010]),
+        ' ' => Some(&[0; FONT_HEIGHT as usize]),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -119,5 +256,13 @@ mod tests {
                 assert!(delta >= 2.0);
             }
         }
+    }
+
+    #[test]
+    fn palette_image_dimensions_match_request() {
+        let colors = vec![Srgb8::new(255, 0, 0), Srgb8::new(0, 255, 0)];
+        let image = palette_to_image(&colors, PaletteLabelStyle::Index, (200, 80));
+        assert_eq!(image.width(), 200);
+        assert_eq!(image.height(), 80);
     }
 }

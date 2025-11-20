@@ -1,13 +1,14 @@
-use crate::colors::{Hsl, Hsv, Rgb, clamp01};
+use colors::{Hsl, Hsv, Rgb, clamp01};
 use std::ops::Range;
 
-pub mod colors;
 mod conversions;
-pub mod diffs;
-pub mod palette;
-mod random;
 mod tinted_theming;
 mod vimrc;
+
+pub mod colors;
+pub mod diffs;
+pub mod palette;
+pub mod random;
 pub mod wcag;
 
 pub mod harmonies;

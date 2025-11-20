@@ -1,5 +1,27 @@
 # Colorizer.rs
 
+## Quickstart
+
+1. Install the CLI straight from the repo:
+
+   ```bash
+   cargo install colorizer --git https://github.com/stormlightlabs/colorizer --branch main
+   ```
+
+2. Generate a golden-ratio palette and print it as hex:
+
+   ```bash
+   colorizer palette random --method golden --count 6 --format hex
+   ```
+
+3. Render it as an image:
+
+   ```bash
+   colorizer image --colors "#ff6600,#ffd166,#06d6a0,#118ab2,#073b4c" --out palette.png --label hex
+   ```
+
+See the [overview](./docs/src/overview.md) for an expanded walkthrough that ties together palette generation, visualization, and exporting.
+
 ## Features
 
 - **Vim Integration**

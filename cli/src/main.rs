@@ -2,7 +2,8 @@ use clap::{Parser, Subcommand};
 use colorizer::{
     HarmonyKind,
     colors::Srgb8,
-    palette::{golden_ratio_palette, palette_from_base},
+    palette::{PaletteLabelStyle, golden_ratio_palette, palette_from_base, palette_to_image},
+    random::{self, PaletteConstraints, PoissonConfig},
 };
 use std::ops::Range;
 
@@ -237,6 +238,18 @@ fn handle_palette(action: PaletteAction) {
                     let (s_range, l_range) = golden_theme_ranges(theme.as_deref());
                     golden_ratio_palette(count, s_range, l_range, min_delta_e)
                 }
+                "uniform" => {
+                    let mut constraints = PaletteConstraints::default();
+                    constraints.min_delta_e = min_delta_e;
+                    random::random_palette_with_constraints(count, constraints)
+                }
+                "poisson" => {
+                    let config = PoissonConfig { radius: min_delta_e.unwrap_or(5.0), ..Default::default() };
+                    random::poisson_palette(config, count)
+                        .into_iter()
+                        .map(Srgb8::from)
+                        .collect()
+                }
                 other => {
                     eprintln!("Random method '{other}' is not implemented yet.");
                     Vec::new()
@@ -264,11 +277,12 @@ fn parse_hex_color(value: &str) -> Result<Srgb8, String> {
     Srgb8::from_hex(value).ok_or_else(|| format!("Invalid color value: {value}"))
 }
 
+/// TODO: allow custom angle input
 fn parse_harmony_kind(value: &str) -> Option<HarmonyKind> {
     match value {
         "complementary" => Some(HarmonyKind::Complementary),
         "split-complementary" => Some(HarmonyKind::SplitComplementary),
-        "analogous" => Some(HarmonyKind::Analogous(30.0)), // TODO: allow custom angle input
+        "analogous" => Some(HarmonyKind::Analogous(30.0)),
         "triadic" => Some(HarmonyKind::Triadic),
         "tetradic" => Some(HarmonyKind::Tetradic),
         "square" => Some(HarmonyKind::Square),
@@ -276,6 +290,7 @@ fn parse_harmony_kind(value: &str) -> Option<HarmonyKind> {
     }
 }
 
+/// TODO: consider richer CLI output (labels, indexes) once UX spec is defined.
 fn output_palette(colors: &[Srgb8], format: &str) {
     let hex_values: Vec<String> = colors.iter().map(|c| c.to_hex()).collect();
     match format {
@@ -287,7 +302,6 @@ fn output_palette(colors: &[Srgb8], format: &str) {
             Ok(serialized) => print!("{serialized}"),
             Err(err) => eprintln!("Failed to serialize palette to YAML: {err}"),
         },
-        // TODO: consider richer CLI output (labels, indexes) once UX spec is defined.
         _ => println!("{}", hex_values.join(", ")),
     }
 }
@@ -300,24 +314,62 @@ fn golden_theme_ranges(theme: Option<&str>) -> (Range<f32>, Range<f32>) {
     }
 }
 
+fn parse_color_list(value: &str) -> Result<Vec<Srgb8>, String> {
+    value
+        .split(',')
+        .map(|segment| parse_hex_color(segment.trim()))
+        .collect()
+}
+
+fn base16_labels(len: usize) -> Vec<String> {
+    const BASE16_KEYS: [&str; 24] = [
+        "base00", "base01", "base02", "base03", "base04", "base05", "base06", "base07", "base08", "base09", "base0A",
+        "base0B", "base0C", "base0D", "base0E", "base0F", "base10", "base11", "base12", "base13", "base14", "base15",
+        "base16", "base17",
+    ];
+    BASE16_KEYS.iter().take(len).map(|label| label.to_string()).collect()
+}
+
 fn handle_image(
     colors: Option<String>, scheme_yaml: Option<String>, out: String, width: Option<u32>, height: Option<u32>,
     label: String,
 ) {
-    println!("Generating palette image: {out}");
-    if let Some(c) = colors {
-        println!("Colors: {c}");
+    let palette = if let Some(list) = colors {
+        match parse_color_list(&list) {
+            Ok(colors) => colors,
+            Err(err) => {
+                eprintln!("{err}");
+                return;
+            }
+        }
+    } else if let Some(path) = scheme_yaml {
+        eprintln!("Scheme loading from YAML is not implemented yet: {path}");
+        return;
+    } else {
+        eprintln!("Provide either --colors or --scheme-yaml.");
+        return;
+    };
+
+    if palette.is_empty() {
+        eprintln!("No colors provided for image generation.");
+        return;
     }
-    if let Some(s) = scheme_yaml {
-        println!("Scheme: {s}");
+
+    let size = (width.unwrap_or(960), height.unwrap_or(320));
+    let image = match label.as_str() {
+        "hex" => palette_to_image(&palette, PaletteLabelStyle::Hex, size),
+        "index" => palette_to_image(&palette, PaletteLabelStyle::Index, size),
+        "base16" => {
+            let labels = base16_labels(palette.len());
+            palette_to_image(&palette, PaletteLabelStyle::Custom(&labels), size)
+        }
+        _ => palette_to_image(&palette, PaletteLabelStyle::None, size),
+    };
+    if let Err(err) = image.save(&out) {
+        eprintln!("Failed to write {out}: {err}");
+    } else {
+        println!("Wrote palette image to {out}");
     }
-    if let Some(w) = width {
-        println!("Width: {w}");
-    }
-    if let Some(h) = height {
-        println!("Height: {h}");
-    }
-    println!("Label style: {label}");
 }
 
 fn handle_vim_scheme(scheme_yaml: String, name: String, output_colors: String, update_vimrc: Option<String>) {
