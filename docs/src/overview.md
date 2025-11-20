@@ -59,10 +59,38 @@ colorizer image \
 
 The renderer draws vertical bars, picks white/black text automatically for each hex label, and saves PNG/JPEG based on the file extension.
 
-## Next Steps
+## Preview in Terminal
 
-- Use `--method poisson` on the random command to explore Poisson-disk sampling in Lab/Lch space.
-- Experiment with `--label base16` when rendering images to quickly inspect Base16 style slot ordering.
-- Wire palette output into downstream tooling (e.g., Vim scheme generation) as the remaining TODO items land.
+Visualize palettes and syntax-highlighted code directly in your terminal without creating files.
 
-Refer back to the repository README for feature highlights and keep an eye on the TODO list for upcoming capabilities.
+### Display palette with colored blocks
+
+```bash
+colorizer demo palette \
+  --colors "#ff6600,#ffd166,#06d6a0,#118ab2,#073b4c"
+```
+
+Shows each color as a filled terminal block with automatic contrast-aware text labels.
+
+### Syntax-highlight code samples
+
+Apply a theme to real code and render with truecolor ANSI escapes:
+
+```bash
+colorizer demo code \
+  --theme-yaml examples/base16/oxocarbon-dark.yml \
+  --language rust \
+  --file examples/languages/sample.rs
+```
+
+Or generate a theme on-the-fly from a base color:
+
+```bash
+colorizer demo code \
+  --base "#61afef" \
+  --harmony triadic \
+  --language python \
+  --file examples/languages/sample.py
+```
+
+Supports rust, python, javascript, typescript, go, elm, and many more languages.

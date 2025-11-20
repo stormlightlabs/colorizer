@@ -14,6 +14,10 @@ use syntect::highlighting::{Color, FontStyle, ScopeSelectors, Style as SyntectSt
 use syntect::parsing::{SyntaxReference, SyntaxSet};
 use syntect::util::LinesWithEndings;
 
+const PANEL_BORDER_COLOR: (u8, u8, u8) = (100, 100, 100);
+const STATUS_BAR_BG: (u8, u8, u8) = (60, 60, 60);
+const STATUS_BAR_FG: (u8, u8, u8) = (220, 220, 220);
+
 /// Displays a palette as colored terminal blocks with labels.
 ///
 /// Each color is shown as a colored line with its hex code and optional label.
@@ -197,76 +201,158 @@ fn to_syntect_color(color: Srgb8) -> Color {
     Color { r: color.r, g: color.g, b: color.b, a: 255 }
 }
 
-/// Highlights source code and prints it to the terminal with colors.
+/// Highlights source code and prints it to the terminal with colors in a bordered panel.
 ///
 /// Reads code from the provided reader, highlights it using the theme and syntax, and outputs each line with ANSI color codes to the terminal.
-pub fn highlight_code_to_terminal<R: BufRead>(reader: R, syntax: &SyntaxReference, theme: &Theme) -> io::Result<()> {
+/// The code is wrapped in a box with a status bar showing file and theme information.
+pub fn highlight_code_to_terminal<R: BufRead>(
+    reader: R, syntax: &SyntaxReference, theme: &Theme, file_path: Option<&str>, theme_name: Option<&str>,
+) -> io::Result<()> {
     let mut highlighter = HighlightLines::new(syntax, theme);
+    let mut highlighted_lines = Vec::new();
+    let mut max_width = 0;
 
     for line in reader.lines() {
         let line = line?;
-        let line_with_newline = format!("{}\n", line);
+        let line_with_newline = format!("{line}\n");
 
         let ranges = highlighter
-            .highlight_line(&line_with_newline, &SyntaxSet::load_defaults_newlines())
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            .highlight_line(&line_with_newline, &load_syntax_set())
+            .map_err(io::Error::other)?;
 
-        print_highlighted_line(&ranges);
+        let line_str = render_highlighted_line(&ranges);
+        let visible_width = line.chars().count();
+        max_width = max_width.max(visible_width);
+        highlighted_lines.push((line_str, visible_width));
     }
+
+    draw_code_panel(
+        &highlighted_lines,
+        max_width,
+        file_path,
+        theme_name,
+        syntax.name.as_str(),
+    );
 
     Ok(())
 }
 
-/// Highlights source code from a string and prints to terminal.
-pub fn highlight_string_to_terminal(code: &str, syntax: &SyntaxReference, theme: &Theme) -> io::Result<()> {
-    let syntax_set = SyntaxSet::load_defaults_newlines();
+/// Highlights source code from a string and prints to terminal in a bordered panel.
+pub fn highlight_string_to_terminal(
+    code: &str, syntax: &SyntaxReference, theme: &Theme, theme_name: Option<&str>,
+) -> io::Result<()> {
+    let syntax_set = load_syntax_set();
     let mut highlighter = HighlightLines::new(syntax, theme);
+    let mut highlighted_lines = Vec::new();
+    let mut max_width = 0;
 
     for line in LinesWithEndings::from(code) {
         let ranges = highlighter
             .highlight_line(line, &syntax_set)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            .map_err(io::Error::other)?;
 
-        print_highlighted_line(&ranges);
+        let line_str = render_highlighted_line(&ranges);
+        let visible_width = line.trim_end().chars().count();
+        max_width = max_width.max(visible_width);
+        highlighted_lines.push((line_str, visible_width));
     }
+
+    draw_code_panel(&highlighted_lines, max_width, None, theme_name, syntax.name.as_str());
 
     Ok(())
 }
 
-/// Prints a highlighted line to the terminal using owo-colors.
-fn print_highlighted_line(ranges: &[(SyntectStyle, &str)]) {
-    for (style, text) in ranges {
-        let output = text.truecolor(style.foreground.r, style.foreground.g, style.foreground.b);
+/// Renders a highlighted line to a String with ANSI codes.
+fn render_highlighted_line(ranges: &[(SyntectStyle, &str)]) -> String {
+    let mut result = String::new();
 
-        if style.font_style.contains(FontStyle::BOLD) {
+    for (style, text) in ranges {
+        let text_without_newline = text.trim_end_matches('\n').trim_end_matches('\r');
+
+        if text_without_newline.is_empty() {
+            continue;
+        }
+
+        let output = text_without_newline.truecolor(style.foreground.r, style.foreground.g, style.foreground.b);
+
+        let formatted = if style.font_style.contains(FontStyle::BOLD) {
             if style.font_style.contains(FontStyle::ITALIC) {
                 if style.font_style.contains(FontStyle::UNDERLINE) {
-                    print!("{}", output.bold().italic().underline());
+                    format!("{}", output.bold().italic().underline())
                 } else {
-                    print!("{}", output.bold().italic());
+                    format!("{}", output.bold().italic())
                 }
             } else if style.font_style.contains(FontStyle::UNDERLINE) {
-                print!("{}", output.bold().underline());
+                format!("{}", output.bold().underline())
             } else {
-                print!("{}", output.bold());
+                format!("{}", output.bold())
             }
         } else if style.font_style.contains(FontStyle::ITALIC) {
             if style.font_style.contains(FontStyle::UNDERLINE) {
-                print!("{}", output.italic().underline());
+                format!("{}", output.italic().underline())
             } else {
-                print!("{}", output.italic());
+                format!("{}", output.italic())
             }
         } else if style.font_style.contains(FontStyle::UNDERLINE) {
-            print!("{}", output.underline());
+            format!("{}", output.underline())
         } else {
-            print!("{}", output);
-        }
+            format!("{output}")
+        };
+
+        result.push_str(&formatted);
     }
+
+    result
 }
 
-/// Loads the default syntax set from syntect.
+/// Draws a bordered panel around code with a status bar at the bottom.
+fn draw_code_panel(
+    lines: &[(String, usize)], max_width: usize, file_path: Option<&str>, theme_name: Option<&str>, language: &str,
+) {
+    let panel_width = max_width.max(50).min(120);
+    let (border_r, border_g, border_b) = PANEL_BORDER_COLOR;
+    let top_border = format!("┌{}┐", "─".repeat(panel_width + 2));
+    println!("{}", top_border.truecolor(border_r, border_g, border_b));
+
+    for (line, visible_width) in lines {
+        let padding =
+            if *visible_width < panel_width { " ".repeat(panel_width - visible_width) } else { String::new() };
+
+        print!("{}", "│ ".truecolor(border_r, border_g, border_b));
+        print!("{}", line);
+        println!("{}{}", padding, " │".truecolor(border_r, border_g, border_b));
+    }
+
+    let bottom_border = format!("└{}┘", "─".repeat(panel_width + 2));
+    println!("{}", bottom_border.truecolor(border_r, border_g, border_b));
+
+    let (status_bg_r, status_bg_g, status_bg_b) = STATUS_BAR_BG;
+    let (status_fg_r, status_fg_g, status_fg_b) = STATUS_BAR_FG;
+
+    let file_info = file_path.unwrap_or("stdin");
+    let theme_info = theme_name.unwrap_or("custom");
+    let status_text = format!(" {} | {} | {} ", file_info, language, theme_info);
+
+    let total_width = panel_width + 4;
+    let status_text_len = status_text.chars().count();
+    let status_padding = if status_text_len < total_width {
+        " ".repeat(total_width - status_text_len)
+    } else {
+        String::new()
+    };
+
+    let full_status = format!("{}{}", status_text, status_padding);
+    println!(
+        "{}",
+        full_status
+            .on_truecolor(status_bg_r, status_bg_g, status_bg_b)
+            .truecolor(status_fg_r, status_fg_g, status_fg_b)
+    );
+}
+
+/// Loads the extended syntax set with support for 100+ languages including TypeScript and Elm.
 pub fn load_syntax_set() -> SyntaxSet {
-    SyntaxSet::load_defaults_newlines()
+    two_face::syntax::extra_newlines()
 }
 
 /// Finds a syntax by language name (e.g., "rust", "python").

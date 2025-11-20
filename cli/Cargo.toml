@@ -13,3 +13,6 @@ toml = "0.9.8"
 rand = "0.9"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 syntect = "5.3.0"
+two-face = { version = "0.4", features = ["syntect-default-onig"] }
+rusttype = "0.9"
+font-loader = "0.11"

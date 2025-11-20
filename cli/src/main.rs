@@ -50,8 +50,12 @@ enum Commands {
         height: Option<u32>,
 
         /// Label style for color bars
-        #[arg(long, value_parser = ["base16", "index", "none"], default_value = "index")]
+        #[arg(long, value_parser = ["hex", "base16", "index", "none"], default_value = "index")]
         label: String,
+
+        /// Show palette in terminal after generating image
+        #[arg(long)]
+        viz: bool,
     },
     /// Generate Vim colorscheme files
     VimScheme {
@@ -191,8 +195,8 @@ fn main() {
 
     match cli.command {
         Commands::Palette { action } => handle_palette(action),
-        Commands::Image { colors, scheme_yaml, out, width, height, label } => {
-            handle_image(colors, scheme_yaml, out, width, height, label)
+        Commands::Image { colors, scheme_yaml, out, width, height, label, viz } => {
+            handle_image(colors, scheme_yaml, out, width, height, label, viz)
         }
         Commands::VimScheme { scheme_yaml, name, output_colors, update_vimrc } => {
             handle_vim_scheme(scheme_yaml, name, output_colors, update_vimrc)
@@ -243,8 +247,7 @@ fn handle_palette(action: PaletteAction) {
                     golden_ratio_palette(count, s_range, l_range, min_delta_e)
                 }
                 "uniform" => {
-                    let mut constraints = PaletteConstraints::default();
-                    constraints.min_delta_e = min_delta_e;
+                    let constraints = PaletteConstraints { min_delta_e, ..Default::default() };
                     random::random_palette_with_constraints(count, constraints)
                 }
                 "poisson" => {
@@ -358,7 +361,7 @@ fn print_scheme_header(meta: &SchemeMetadata) {
 
 fn handle_image(
     colors: Option<String>, scheme_yaml: Option<String>, out: String, width: Option<u32>, height: Option<u32>,
-    label: String,
+    label: String, viz: bool,
 ) {
     let palette = if let Some(list) = colors {
         match parse_color_list(&list) {
@@ -395,6 +398,17 @@ fn handle_image(
         eprintln!("Failed to write {out}: {err}");
     } else {
         println!("Wrote palette image to {out}");
+
+        if viz {
+            println!();
+            let labels: Vec<String> = match label.as_str() {
+                "hex" => palette.iter().map(|c| c.to_hex().to_uppercase()).collect(),
+                "base16" => base16_labels(palette.len()),
+                "index" => (0..palette.len()).map(|i| format!("{:02}", i)).collect(),
+                _ => vec![],
+            };
+            syntax::display_palette_in_terminal(&palette, if labels.is_empty() { None } else { Some(&labels) });
+        }
     }
 }
 
@@ -419,7 +433,6 @@ fn handle_demo(demo_type: DemoType) {
                     }
                 }
             } else if let Some(scheme_path) = scheme_yaml {
-                // Try Base16 first, then Base24
                 if let Ok(schemes) = tinted_theming::load_base16_schemes(&scheme_path) {
                     schemes[0].colors().to_vec()
                 } else if let Ok(schemes) = tinted_theming::load_base24_schemes(&scheme_path) {
@@ -433,22 +446,24 @@ fn handle_demo(demo_type: DemoType) {
                 return;
             };
 
-            let labels: Vec<String> = (0..palette.len()).map(|i| format!("base{:02X}", i)).collect();
+            let labels: Vec<String> = (0..palette.len()).map(|i| format!("base{i:02X}")).collect();
 
             syntax::display_palette_in_terminal(&palette, Some(&labels));
         }
         DemoType::Code { language, theme_yaml, base, harmony, file } => {
-            let theme = if let Some(theme_path) = theme_yaml {
-                if let Ok(schemes) = tinted_theming::load_base16_schemes(&theme_path) {
-                    syntax::base16_to_theme(&schemes[0])
-                } else if let Ok(schemes) = tinted_theming::load_base24_schemes(&theme_path) {
-                    syntax::base24_to_theme(&schemes[0])
+            let (theme, theme_name) = if let Some(theme_path) = &theme_yaml {
+                if let Ok(schemes) = tinted_theming::load_base16_schemes(theme_path) {
+                    let name = schemes[0].metadata.name.clone();
+                    (syntax::base16_to_theme(&schemes[0]), Some(name))
+                } else if let Ok(schemes) = tinted_theming::load_base24_schemes(theme_path) {
+                    let name = schemes[0].metadata.name.clone();
+                    (syntax::base24_to_theme(&schemes[0]), Some(name))
                 } else {
                     eprintln!("Failed to load theme from {theme_path}");
                     return;
                 }
-            } else if let Some(base_color) = base {
-                let base_srgb = match parse_hex_color(&base_color) {
+            } else if let Some(base_color) = &base {
+                let base_srgb = match parse_hex_color(base_color) {
                     Ok(color) => color,
                     Err(err) => {
                         eprintln!("{err}");
@@ -480,13 +495,12 @@ fn handle_demo(demo_type: DemoType) {
                 };
 
                 let scheme = tinted_theming::Base16Scheme::new(metadata, colors);
-                syntax::base16_to_theme(&scheme)
+                (syntax::base16_to_theme(&scheme), Some("Generated".to_string()))
             } else {
                 eprintln!("Provide either --theme-yaml or --base");
                 return;
             };
 
-            // Load syntax
             let syntax_set = syntax::load_syntax_set();
             let syntax = match syntax::find_syntax_by_name(&syntax_set, &language) {
                 Some(syn) => syn,
@@ -496,11 +510,17 @@ fn handle_demo(demo_type: DemoType) {
                 }
             };
 
-            if let Some(file_path) = file {
-                match File::open(&file_path) {
-                    Ok(file) => {
-                        let reader = BufReader::new(file);
-                        if let Err(err) = syntax::highlight_code_to_terminal(reader, syntax, &theme) {
+            if let Some(file_path) = &file {
+                match File::open(file_path) {
+                    Ok(file_handle) => {
+                        let reader = BufReader::new(file_handle);
+                        if let Err(err) = syntax::highlight_code_to_terminal(
+                            reader,
+                            syntax,
+                            &theme,
+                            Some(file_path.as_str()),
+                            theme_name.as_deref(),
+                        ) {
                             eprintln!("Failed to highlight code: {err}");
                         }
                     }
@@ -516,7 +536,7 @@ fn handle_demo(demo_type: DemoType) {
                     return;
                 }
 
-                if let Err(err) = syntax::highlight_string_to_terminal(&code, syntax, &theme) {
+                if let Err(err) = syntax::highlight_string_to_terminal(&code, syntax, &theme, theme_name.as_deref()) {
                     eprintln!("Failed to highlight code: {err}");
                 }
             }

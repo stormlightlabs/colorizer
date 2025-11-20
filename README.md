@@ -4,23 +4,34 @@
 
 1. Install the CLI straight from the repo:
 
-   ```bash
-   cargo install colorizer --git https://github.com/stormlightlabs/colorizer --branch main
-   ```
+    ```bash
+    cargo install colorizer --git https://github.com/stormlightlabs/colorizer
+    ```
 
 2. Generate a golden-ratio palette and print it as hex:
 
-   ```bash
-   colorizer palette random --method golden --count 6 --format hex
-   ```
+    ```bash
+    colorizer palette random --method golden --count 6 --format hex
+    ```
 
 3. Render it as an image:
 
-   ```bash
-   colorizer image --colors "#ff6600,#ffd166,#06d6a0,#118ab2,#073b4c" --out palette.png --label hex
-   ```
+    ```bash
+    colorizer image --colors "#bf616a,#d08770,#ebcb8b,#a3be8c,#b48ead" --output palette.png --label hex
+    ```
 
-See the [overview](./docs/src/overview.md) for an expanded walkthrough that ties together palette generation, visualization, and exporting.
+    ![Nord Aurora](./examples/images/nord-aurora.png)
+
+4. Preview syntax highlighting in your terminal:
+
+    ```bash
+    colorizer demo code --theme-yaml examples/base16/oxocarbon-dark.yml --file examples/languages/sample.rs
+    colorizer demo code --theme-yaml examples/base16/oxocarbon-dark.yml --file examples/languages/sample.elm
+    ```
+
+    | Rust                                                              | Elm                                                               |
+    | ----------------------------------------------------------------- | ----------------------------------------------------------------- |
+    | ![Rust + Oxocarbon Code Demo](./examples/images/syntax-hl-rs.png) | ![Elm + Oxocarbon Code Demo](./examples/images/syntax-hl-elm.png) |
 
 ## Features
 
@@ -39,7 +50,6 @@ See the [overview](./docs/src/overview.md) for an expanded walkthrough that ties
     - Generate color palettes from one or more input colors.
     - Support for deterministic harmonies (e.g., complementary, triadic) and fully random palettes.
     - Load Base16 and Base24 palettes from YAML and convert them into internal palettes.
-
 - **Visualization**
     - Render palette previews as images with vertical color bars.
     - Automatically choose white or black text on each bar for optimal readability.

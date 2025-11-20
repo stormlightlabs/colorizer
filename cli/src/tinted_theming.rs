@@ -119,12 +119,12 @@ struct RawScheme {
 
 /// Loads Base16 schemes from a file or directory path.
 pub fn load_base16_schemes(path: impl AsRef<Path>) -> Result<Vec<Base16Scheme>, SchemeError> {
-    load_schemes(path.as_ref(), "base16", |raw, path| parse_base16(raw, path))
+    load_schemes(path.as_ref(), "base16", parse_base16)
 }
 
 /// Loads Base24 schemes from a file or directory path.
 pub fn load_base24_schemes(path: impl AsRef<Path>) -> Result<Vec<Base24Scheme>, SchemeError> {
-    load_schemes(path.as_ref(), "base24", |raw, path| parse_base24(raw, path))
+    load_schemes(path.as_ref(), "base24", parse_base24)
 }
 
 fn load_schemes<T, F>(path: &Path, expected: &str, parser: F) -> Result<Vec<T>, SchemeError>
@@ -201,10 +201,7 @@ fn build_palette(palette: &HashMap<String, String>, keys: &[&str]) -> Result<Vec
 }
 
 fn is_yaml(path: &Path) -> bool {
-    match path.extension().and_then(|ext| ext.to_str()) {
-        Some(ext) if ext.eq_ignore_ascii_case("yml") || ext.eq_ignore_ascii_case("yaml") => true,
-        _ => false,
-    }
+    matches!(path.extension().and_then(|ext| ext.to_str()), Some(ext) if ext.eq_ignore_ascii_case("yml") || ext.eq_ignore_ascii_case("yaml"))
 }
 
 #[cfg(test)]

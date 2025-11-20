@@ -106,7 +106,7 @@ mod tests {
         let noise = HashNoise::new(42);
         for i in 0..100 {
             let v = noise.noise(i as f32 * 0.1);
-            assert!(v >= 0.0 && v <= 1.0);
+            assert!((0.0..=1.0).contains(&v));
         }
     }
 

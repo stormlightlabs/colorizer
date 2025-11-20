@@ -8,12 +8,15 @@ use crate::shades::{darken_hsl, lighten_hsl};
 use crate::wcag::contrast_ratio;
 
 use image::{Rgb as ImgRgb, RgbImage};
+use rusttype::{Font, Scale, point};
 use std::cmp::max;
 use std::ops::Range;
 
 const VARIATION_STEP: f32 = 0.08;
 const FONT_WIDTH: u32 = 5;
 const FONT_HEIGHT: u32 = 7;
+const TRUETYPE_FONT_SIZE: f32 = 24.0;
+const MIN_HEIGHT_WITH_TRUETYPE: u32 = 40;
 
 /// Label styles supported during palette-to-image rendering.
 #[derive(Debug, Clone, Copy)]
@@ -100,10 +103,48 @@ fn filter_by_contrast(colors: Vec<Srgb8>, background: Option<Srgb8>, min_contras
     }
 }
 
+/// Attempts to load a TrueType font from the system.
+///
+/// TODO: Allow users to pass in a custom font family via CLI flag (e.g., --font "FontName").
+fn load_system_font() -> Option<Font<'static>> {
+    if let Some((data, _)) = font_loader::system_fonts::get(
+        &font_loader::system_fonts::FontPropertyBuilder::new()
+            .family("0xProto Nerd Font")
+            .build(),
+    ) {
+        if let Some(font) = Font::try_from_vec(data) {
+            return Some(font);
+        }
+    }
+
+    for family in &[
+        "0xProto Nerd Font Mono",
+        "Monaco",
+        "Menlo",
+        "Consolas",
+        "DejaVu Sans Mono",
+    ] {
+        if let Some((data, _)) = font_loader::system_fonts::get(
+            &font_loader::system_fonts::FontPropertyBuilder::new()
+                .family(family)
+                .build(),
+        ) {
+            if let Some(font) = Font::try_from_vec(data) {
+                return Some(font);
+            }
+        }
+    }
+
+    None
+}
+
 /// Renders the palette into an RGB image with vertical bars and optional labels.
 pub fn palette_to_image<'a>(colors: &[Srgb8], labels: PaletteLabelStyle<'a>, size: (u32, u32)) -> RgbImage {
+    let system_font = load_system_font();
+    let min_height = if system_font.is_some() { MIN_HEIGHT_WITH_TRUETYPE } else { FONT_HEIGHT + 8 };
+
     let width = max(size.0, colors.len() as u32).max(1);
-    let height = max(size.1, FONT_HEIGHT + 8);
+    let height = max(size.1, min_height);
     let mut image = RgbImage::from_pixel(width, height, ImgRgb([0, 0, 0]));
 
     if colors.is_empty() {
@@ -124,7 +165,11 @@ pub fn palette_to_image<'a>(colors: &[Srgb8], labels: PaletteLabelStyle<'a>, siz
 
         if let Some(text) = label_strings.get(index) {
             let text_color = pick_label_color(color);
-            draw_label(&mut image, text, start_x, end_x, text_color);
+            if let Some(ref font) = system_font {
+                draw_label_truetype(&mut image, text, start_x, end_x, text_color, font);
+            } else {
+                draw_label_bitmap(&mut image, text, start_x, end_x, text_color);
+            }
         }
 
         start_x = end_x;
@@ -160,7 +205,58 @@ fn pick_label_color(bg: Srgb8) -> Srgb8 {
     if contrast_ratio(bg, white) >= contrast_ratio(bg, black) { white } else { black }
 }
 
-fn draw_label(image: &mut RgbImage, text: &str, start_x: u32, end_x: u32, color: Srgb8) {
+fn draw_label_truetype(image: &mut RgbImage, text: &str, start_x: u32, end_x: u32, color: Srgb8, font: &Font) {
+    if text.is_empty() {
+        return;
+    }
+
+    let sanitized = text.trim();
+    if sanitized.is_empty() {
+        return;
+    }
+
+    let scale = Scale::uniform(TRUETYPE_FONT_SIZE);
+    let v_metrics = font.v_metrics(scale);
+
+    let glyphs: Vec<_> = font.layout(sanitized, scale, point(0.0, 0.0)).collect();
+    let text_width = glyphs
+        .iter()
+        .filter_map(|g| g.pixel_bounding_box().map(|b| b.max.x))
+        .max()
+        .unwrap_or(0) as u32;
+
+    let available = end_x.saturating_sub(start_x);
+    let x = start_x + available.saturating_sub(text_width) / 2;
+    let y = image
+        .height()
+        .saturating_sub((v_metrics.ascent - v_metrics.descent) as u32 + 6);
+
+    for glyph in font.layout(sanitized, scale, point(x as f32, y as f32 + v_metrics.ascent)) {
+        if let Some(bounding_box) = glyph.pixel_bounding_box() {
+            glyph.draw(|gx, gy, v| {
+                let px = bounding_box.min.x + gx as i32;
+                let py = bounding_box.min.y + gy as i32;
+
+                if px >= 0 && py >= 0 {
+                    let px = px as u32;
+                    let py = py as u32;
+
+                    if px < image.width() && py < image.height() && v > 0.1 {
+                        let bg = image.get_pixel(px, py);
+
+                        let r = ((1.0 - v) * bg[0] as f32 + v * color.r as f32) as u8;
+                        let g = ((1.0 - v) * bg[1] as f32 + v * color.g as f32) as u8;
+                        let b = ((1.0 - v) * bg[2] as f32 + v * color.b as f32) as u8;
+
+                        image.put_pixel(px, py, ImgRgb([r, g, b]));
+                    }
+                }
+            });
+        }
+    }
+}
+
+fn draw_label_bitmap(image: &mut RgbImage, text: &str, start_x: u32, end_x: u32, color: Srgb8) {
     if text.is_empty() {
         return;
     }
