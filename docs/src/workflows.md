@@ -1,6 +1,6 @@
 # Workflows
 
-This guide demonstrates end-to-end workflows combining palette generation, visualization, and terminal demos.
+This guide demonstrates end-to-end workflows combining palette generation, visualization, and terminal previews.
 
 ## Triadic Harmony Pipeline
 
@@ -25,7 +25,7 @@ colorizer palette from-base \
 
 This produces 9 colors spaced around the color wheel at 120° intervals, expanded with tints and shades, filtered to ensure readable text on dark backgrounds. The palette is output to stdout and saved as an image with hex labels.
 
-## Base16 Scheme Demo
+## Base16 Scheme Preview
 
 Load a tinted-theming scheme, export the palette, generate an image, and syntax-highlight code samples.
 
@@ -59,7 +59,7 @@ Labels each bar with `base00` through `base0F` for easy reference against tinted
 Apply the scheme to real source code and render in the terminal with full truecolor support:
 
 ```bash
-colorizer demo code \
+colorizer preview code \
   --theme-yaml examples/base16/oxocarbon-dark.yml \
   --language rust \
   --file examples/languages/sample.rs
@@ -71,13 +71,13 @@ Supports multiple languages (rust, python, javascript, typescript, go, elm, and 
 
 ```bash
 # Python
-colorizer demo code \
+colorizer preview code \
   --theme-yaml examples/base24/catppuccin-mocha.yml \
   --language python \
   --file examples/languages/sample.py
 
 # TypeScript
-colorizer demo code \
+colorizer preview code \
   --theme-yaml examples/base24/catppuccin-frappe.yml \
   --language typescript \
   --file examples/languages/sample.ts
@@ -189,7 +189,7 @@ Quickly generate a syntax theme from any base color without saving a scheme file
 ### From base color with harmony
 
 ```bash
-colorizer demo code \
+colorizer preview code \
   --base "#e06c75" \
   --harmony complementary \
   --language rust \
@@ -213,7 +213,7 @@ Generates a 16-color Base16-style theme on the fly using the specified harmony a
 # Try different harmonies on the same code
 for harmony in complementary triadic tetradic square; do
   echo "=== $harmony ==="
-  colorizer demo code \
+  colorizer preview code \
     --base "#61afef" \
     --harmony "$harmony" \
     --language python \
@@ -292,14 +292,14 @@ Preview any palette without creating image files.
 ### From hex list
 
 ```bash
-colorizer demo palette \
+colorizer preview palette \
   --colors "#ff6188,#fc9867,#ffd866,#a9dc76,#78dce8,#ab9df2,#ff6188"
 ```
 
 ### From scheme file
 
 ```bash
-colorizer demo palette \
+colorizer preview palette \
   --scheme-yaml examples/base24/catppuccin-latte.yml
 ```
 

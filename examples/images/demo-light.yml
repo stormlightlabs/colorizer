@@ -1,0 +1,20 @@
+system: base16
+name: Demo Light
+variant: light
+palette:
+  base0D: '#3f74a0'
+  base0C: '#368c8c'
+  base0E: '#a54dc0'
+  base01: '#f3f3f3'
+  base08: '#b14781'
+  base0A: '#8c8c36'
+  base05: '#999999'
+  base0F: '#7c6658'
+  base03: '#d6d6d6'
+  base09: '#8c6c36'
+  base00: '#f9f9f9'
+  base04: '#c2c2c2'
+  base0B: '#658c36'
+  base07: '#5d5d5d'
+  base02: '#e7e7e7'
+  base06: '#7c7c7c'

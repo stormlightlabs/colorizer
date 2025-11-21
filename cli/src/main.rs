@@ -75,10 +75,10 @@ enum Commands {
         #[arg(long)]
         update_vimrc: Option<String>,
     },
-    /// Show syntax-highlighted code samples in terminal
-    Demo {
+    /// Preview palettes and syntax-highlighted code in terminal
+    Preview {
         #[command(subcommand)]
-        demo_type: DemoType,
+        preview_type: PreviewType,
     },
 }
 
@@ -176,7 +176,7 @@ enum PaletteAction {
         image_height: u32,
         /// Image label style
         #[arg(long, value_parser = ["hex", "base16", "index", "none"], default_value = "index")]
-        image_label: String,
+        label: String,
     },
     /// Generate random color palettes
     Random {
@@ -184,7 +184,7 @@ enum PaletteAction {
         #[arg(long, default_value = "5")]
         count: usize,
         /// Generation method
-        #[arg(long, value_parser = ["uniform", "golden", "poisson"], default_value = "golden")]
+        #[arg(long, value_parser = ["uniform", "golden", "poisson"], default_value = "uniform")]
         method: String,
         /// Minimum color difference (Delta E)
         #[arg(long)]
@@ -206,7 +206,7 @@ enum PaletteAction {
         image_height: u32,
         /// Image label style
         #[arg(long, value_parser = ["hex", "base16", "index", "none"], default_value = "index")]
-        image_label: String,
+        label: String,
     },
     /// Export Base16 palette from scheme
     Base16 {
@@ -229,7 +229,7 @@ enum PaletteAction {
 }
 
 #[derive(Subcommand)]
-enum DemoType {
+enum PreviewType {
     /// Show palette as colored terminal output
     Palette {
         /// Color values as hex codes (comma-separated)
@@ -271,7 +271,7 @@ fn main() {
         Commands::VimScheme { scheme_yaml, name, output_colors, update_vimrc } => {
             handle_vim_scheme(scheme_yaml, name, output_colors, update_vimrc)
         }
-        Commands::Demo { demo_type } => handle_demo(demo_type),
+        Commands::Preview { preview_type } => handle_preview(preview_type),
     }
 }
 
@@ -408,7 +408,7 @@ fn handle_scheme(action: SchemeAction) {
                 }
                 "image" => {
                     let output_path = output.unwrap_or_else(|| "scheme.png".to_string());
-                    let labels = base16_labels(colors.len());
+                    let labels: Vec<String> = (0..colors.len()).map(|i| format!("{i:02X}")).collect();
                     let image = palette_to_image(&colors, PaletteLabelStyle::Custom(&labels), (width, height));
 
                     if let Err(err) = image.save(&output_path) {
@@ -514,7 +514,7 @@ fn handle_palette(action: PaletteAction) {
             save_image,
             image_width,
             image_height,
-            image_label,
+            label,
         } => {
             let base_color = match parse_hex_color(&base) {
                 Ok(color) => color,
@@ -548,7 +548,7 @@ fn handle_palette(action: PaletteAction) {
                 output_palette(&palette, &format);
 
                 if let Some(image_path) = save_image {
-                    generate_palette_image(&palette, &image_path, image_width, image_height, &image_label);
+                    generate_palette_image(&palette, &image_path, image_width, image_height, &label);
                 }
             }
         }
@@ -561,7 +561,7 @@ fn handle_palette(action: PaletteAction) {
             save_image,
             image_width,
             image_height,
-            image_label,
+            label,
         } => {
             let palette = match method.as_str() {
                 "golden" => {
@@ -591,7 +591,7 @@ fn handle_palette(action: PaletteAction) {
                 output_palette(&palette, &format);
 
                 if let Some(image_path) = save_image {
-                    generate_palette_image(&palette, &image_path, image_width, image_height, &image_label);
+                    generate_palette_image(&palette, &image_path, image_width, image_height, &label);
                 }
             }
         }
@@ -766,9 +766,9 @@ fn handle_vim_scheme(scheme_yaml: String, name: String, output_colors: String, u
     }
 }
 
-fn handle_demo(demo_type: DemoType) {
-    match demo_type {
-        DemoType::Palette { colors, scheme_yaml } => {
+fn handle_preview(preview_type: PreviewType) {
+    match preview_type {
+        PreviewType::Palette { colors, scheme_yaml } => {
             let palette = if let Some(color_list) = colors {
                 match parse_color_list(&color_list) {
                     Ok(colors) => colors,
@@ -794,7 +794,7 @@ fn handle_demo(demo_type: DemoType) {
             let labels: Vec<String> = (0..palette.len()).map(|i| format!("{i:02X}")).collect();
             syntax::display_palette_in_terminal(&palette, Some(&labels));
         }
-        DemoType::Code { language, theme_yaml, base, harmony, file } => {
+        PreviewType::Code { language, theme_yaml, base, harmony, file } => {
             let (theme, theme_name) = if let Some(theme_path) = &theme_yaml {
                 if let Ok(schemes) = tinted_theming::load_base16_schemes(theme_path) {
                     let name = schemes[0].metadata.name.clone();
@@ -884,6 +884,309 @@ fn handle_demo(demo_type: DemoType) {
                     eprintln!("Failed to highlight code: {err}");
                 }
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    mod parse_hex_color_tests {
+        use super::*;
+
+        #[test]
+        fn parses_valid_hex_with_hash() {
+            let result = parse_hex_color("#ff5500");
+            assert!(result.is_ok());
+            let color = result.unwrap();
+            assert_eq!(color.r, 255);
+            assert_eq!(color.g, 85);
+            assert_eq!(color.b, 0);
+        }
+
+        #[test]
+        fn parses_valid_hex_without_hash() {
+            let result = parse_hex_color("00ff00");
+            assert!(result.is_ok());
+            let color = result.unwrap();
+            assert_eq!(color.r, 0);
+            assert_eq!(color.g, 255);
+            assert_eq!(color.b, 0);
+        }
+
+        #[test]
+        fn parses_uppercase_hex() {
+            let result = parse_hex_color("#FF5500");
+            assert!(result.is_ok());
+            let color = result.unwrap();
+            assert_eq!(color.r, 255);
+            assert_eq!(color.g, 85);
+            assert_eq!(color.b, 0);
+        }
+
+        #[test]
+        fn rejects_invalid_hex() {
+            let result = parse_hex_color("invalid");
+            assert!(result.is_err());
+            assert!(result.unwrap_err().contains("Invalid color value"));
+        }
+
+        #[test]
+        fn rejects_short_hex() {
+            let result = parse_hex_color("#fff");
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn rejects_empty_string() {
+            let result = parse_hex_color("");
+            assert!(result.is_err());
+        }
+    }
+
+    mod parse_harmony_kind_tests {
+        use super::*;
+
+        #[test]
+        fn parses_complementary() {
+            let result = parse_harmony_kind("complementary");
+            assert!(matches!(result, Some(HarmonyKind::Complementary)));
+        }
+
+        #[test]
+        fn parses_split_complementary() {
+            let result = parse_harmony_kind("split-complementary");
+            assert!(matches!(result, Some(HarmonyKind::SplitComplementary)));
+        }
+
+        #[test]
+        fn parses_analogous() {
+            let result = parse_harmony_kind("analogous");
+            assert!(matches!(result, Some(HarmonyKind::Analogous(_))));
+        }
+
+        #[test]
+        fn parses_triadic() {
+            let result = parse_harmony_kind("triadic");
+            assert!(matches!(result, Some(HarmonyKind::Triadic)));
+        }
+
+        #[test]
+        fn parses_tetradic() {
+            let result = parse_harmony_kind("tetradic");
+            assert!(matches!(result, Some(HarmonyKind::Tetradic)));
+        }
+
+        #[test]
+        fn parses_square() {
+            let result = parse_harmony_kind("square");
+            assert!(matches!(result, Some(HarmonyKind::Square)));
+        }
+
+        #[test]
+        fn returns_none_for_invalid() {
+            let result = parse_harmony_kind("invalid");
+            assert!(result.is_none());
+        }
+
+        #[test]
+        fn returns_none_for_empty() {
+            let result = parse_harmony_kind("");
+            assert!(result.is_none());
+        }
+
+        #[test]
+        fn case_sensitive() {
+            let result = parse_harmony_kind("COMPLEMENTARY");
+            assert!(result.is_none());
+        }
+    }
+
+    mod golden_theme_ranges_tests {
+        use super::*;
+
+        #[test]
+        fn light_theme_has_correct_ranges() {
+            let (s_range, l_range) = golden_theme_ranges(Some("light"));
+            assert_eq!(s_range.start, 0.25);
+            assert_eq!(s_range.end, 0.55);
+            assert_eq!(l_range.start, 0.6);
+            assert_eq!(l_range.end, 0.9);
+        }
+
+        #[test]
+        fn dark_theme_has_correct_ranges() {
+            let (s_range, l_range) = golden_theme_ranges(Some("dark"));
+            assert_eq!(s_range.start, 0.45);
+            assert_eq!(s_range.end, 0.85);
+            assert_eq!(l_range.start, 0.2);
+            assert_eq!(l_range.end, 0.45);
+        }
+
+        #[test]
+        fn default_theme_has_correct_ranges() {
+            let (s_range, l_range) = golden_theme_ranges(None);
+            assert_eq!(s_range.start, 0.4);
+            assert_eq!(s_range.end, 0.8);
+            assert_eq!(l_range.start, 0.35);
+            assert_eq!(l_range.end, 0.7);
+        }
+
+        #[test]
+        fn unknown_theme_uses_default() {
+            let (s_range, l_range) = golden_theme_ranges(Some("unknown"));
+            assert_eq!(s_range.start, 0.4);
+            assert_eq!(s_range.end, 0.8);
+            assert_eq!(l_range.start, 0.35);
+            assert_eq!(l_range.end, 0.7);
+        }
+    }
+
+    mod parse_color_list_tests {
+        use super::*;
+
+        #[test]
+        fn parses_single_color() {
+            let result = parse_color_list("#ff0000");
+            assert!(result.is_ok());
+            let colors = result.unwrap();
+            assert_eq!(colors.len(), 1);
+            assert_eq!(colors[0].r, 255);
+            assert_eq!(colors[0].g, 0);
+            assert_eq!(colors[0].b, 0);
+        }
+
+        #[test]
+        fn parses_multiple_colors() {
+            let result = parse_color_list("#ff0000,#00ff00,#0000ff");
+            assert!(result.is_ok());
+            let colors = result.unwrap();
+            assert_eq!(colors.len(), 3);
+            assert_eq!(colors[0].r, 255);
+            assert_eq!(colors[1].g, 255);
+            assert_eq!(colors[2].b, 255);
+        }
+
+        #[test]
+        fn handles_whitespace() {
+            let result = parse_color_list("#ff0000, #00ff00 , #0000ff");
+            assert!(result.is_ok());
+            let colors = result.unwrap();
+            assert_eq!(colors.len(), 3);
+        }
+
+        #[test]
+        fn rejects_list_with_invalid_color() {
+            let result = parse_color_list("#ff0000,invalid,#0000ff");
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn rejects_empty_string() {
+            let result = parse_color_list("");
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn parses_colors_without_hash() {
+            let result = parse_color_list("ff0000,00ff00,0000ff");
+            assert!(result.is_ok());
+            let colors = result.unwrap();
+            assert_eq!(colors.len(), 3);
+        }
+    }
+
+    mod base16_labels_tests {
+        use super::*;
+
+        #[test]
+        fn generates_16_labels() {
+            let labels = base16_labels(16);
+            assert_eq!(labels.len(), 16);
+            assert_eq!(labels[0], "base00");
+            assert_eq!(labels[15], "base0F");
+        }
+
+        #[test]
+        fn generates_24_labels() {
+            let labels = base16_labels(24);
+            assert_eq!(labels.len(), 24);
+            assert_eq!(labels[0], "base00");
+            assert_eq!(labels[23], "base17");
+        }
+
+        #[test]
+        fn generates_8_labels() {
+            let labels = base16_labels(8);
+            assert_eq!(labels.len(), 8);
+            assert_eq!(labels[0], "base00");
+            assert_eq!(labels[7], "base07");
+        }
+
+        #[test]
+        fn handles_zero_length() {
+            let labels = base16_labels(0);
+            assert_eq!(labels.len(), 0);
+        }
+
+        #[test]
+        fn labels_have_correct_format() {
+            let labels = base16_labels(16);
+            for (_, label) in labels.iter().enumerate() {
+                assert!(label.starts_with("base"));
+                assert_eq!(label.len(), 6);
+            }
+        }
+
+        #[test]
+        fn truncates_beyond_24() {
+            let labels = base16_labels(30);
+            assert_eq!(labels.len(), 24);
+        }
+    }
+
+    mod output_palette_tests {
+        use super::*;
+
+        #[test]
+        fn output_palette_does_not_panic() {
+            let palette = vec![Srgb8::new(255, 0, 0), Srgb8::new(0, 255, 0), Srgb8::new(0, 0, 255)];
+
+            output_palette(&palette, "hex");
+            output_palette(&palette, "json");
+            output_palette(&palette, "yaml");
+        }
+
+        #[test]
+        fn output_palette_handles_empty() {
+            let palette = vec![];
+            output_palette(&palette, "hex");
+        }
+    }
+
+    mod integration_tests {
+        use super::*;
+
+        #[test]
+        fn full_workflow_from_base_to_palette() {
+            let base_color = parse_hex_color("#ff5500").unwrap();
+            let harmony_kind = parse_harmony_kind("triadic").unwrap();
+            let palette = palette_from_base(base_color, harmony_kind, 5, None, None, None);
+
+            assert!(!palette.is_empty());
+            assert!(palette.len() <= 5);
+        }
+
+        #[test]
+        fn parse_and_visualize_workflow() {
+            let color_list = "#ff0000,#00ff00,#0000ff";
+            let colors = parse_color_list(color_list).unwrap();
+            let labels = base16_labels(colors.len());
+
+            assert_eq!(colors.len(), 3);
+            assert_eq!(labels.len(), 3);
+            assert_eq!(labels[0], "base00");
         }
     }
 }
