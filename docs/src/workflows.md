@@ -4,9 +4,9 @@ This guide demonstrates end-to-end workflows combining palette generation, visua
 
 ## Triadic Harmony Pipeline
 
-Generate a triadic harmony palette from a base color, filter by contrast, render as an image, and preview in the terminal.
+Generate a triadic harmony palette from a base color, filter by contrast, and render as an image.
 
-### Generate the palette
+### Generate palette and image
 
 Start with a brand color and derive triadic harmonies with WCAG AA contrast against a dark background:
 
@@ -17,36 +17,13 @@ colorizer palette from-base \
   --count 9 \
   --min-contrast 4.5 \
   --background "#0f0f0f" \
-  --format hex
+  --save-image triadic-palette.png \
+  --image-width 1200 \
+  --image-height 400 \
+  --image-label hex
 ```
 
-This produces 9 colors spaced around the color wheel at 120° intervals, expanded with tints and shades, filtered to ensure readable text on dark backgrounds.
-
-### Render as image
-
-Take the hex output and visualize it:
-
-```bash
-colorizer image \
-  --colors "#ff6600,#ffa733,#ffd166,#66ff00,#99ff33,#ccff66,#0066ff,#3399ff,#66ccff" \
-  --out triadic-palette.png \
-  --width 1200 \
-  --height 400 \
-  --label hex
-```
-
-Produces a horizontal bar chart with hex codes overlaid in high-contrast text.
-
-### Preview in terminal
-
-View the palette with colored blocks and Base16-style labels:
-
-```bash
-colorizer demo palette \
-  --colors "#ff6600,#ffa733,#ffd166,#66ff00,#99ff33,#ccff66,#0066ff,#3399ff,#66ccff"
-```
-
-Each color renders as a filled terminal block with automatic black or white text based on luminance.
+This produces 9 colors spaced around the color wheel at 120° intervals, expanded with tints and shades, filtered to ensure readable text on dark backgrounds. The palette is output to stdout and saved as an image with hex labels.
 
 ## Base16 Scheme Demo
 
@@ -151,15 +128,19 @@ colorizer palette random \
 Generate multiple Poisson palettes and compare them side by side:
 
 ```bash
-# Generate first palette
-colorizer palette random --method poisson --count 6 --min-delta-e 15 --format hex > palette1.txt
+# Generate first palette with image
+colorizer palette random \
+  --method poisson \
+  --count 6 \
+  --min-delta-e 15 \
+  --save-image poisson-sparse.png
 
 # Generate second with tighter spacing
-colorizer palette random --method poisson --count 12 --min-delta-e 8 --format hex > palette2.txt
-
-# Render both
-colorizer image --colors "$(cat palette1.txt)" --out poisson-sparse.png
-colorizer image --colors "$(cat palette2.txt)" --out poisson-dense.png
+colorizer palette random \
+  --method poisson \
+  --count 12 \
+  --min-delta-e 8 \
+  --save-image poisson-dense.png
 ```
 
 ## Golden Ratio Palette Generation
@@ -261,14 +242,20 @@ colorizer palette from-base \
   --format yaml > palette.yml
 ```
 
-### Pipe to image generation
+### Generate palette with image output
 
 ```bash
-colorizer palette random --method poisson --count 5 --min-delta-e 12 --format hex \
-  | xargs -I {} colorizer image --colors {} --out random-palette.png
+colorizer palette random \
+  --method poisson \
+  --count 5 \
+  --min-delta-e 12 \
+  --save-image random-palette.png \
+  --image-width 1200 \
+  --image-height 400 \
+  --image-label hex
 ```
 
-Combines palette generation and visualization in a single pipeline.
+Generates both palette output and a visualization image in a single command.
 
 ## Advanced Constraint-Based Generation
 

@@ -165,6 +165,18 @@ enum PaletteAction {
         /// Output format
         #[arg(long, value_parser = ["json", "yaml", "hex"], default_value = "hex")]
         format: String,
+        /// Generate and save palette image to this path
+        #[arg(long)]
+        save_image: Option<String>,
+        /// Image width in pixels
+        #[arg(long, default_value = "960")]
+        image_width: u32,
+        /// Image height in pixels
+        #[arg(long, default_value = "320")]
+        image_height: u32,
+        /// Image label style
+        #[arg(long, value_parser = ["hex", "base16", "index", "none"], default_value = "index")]
+        image_label: String,
     },
     /// Generate random color palettes
     Random {
@@ -183,6 +195,18 @@ enum PaletteAction {
         /// Output format
         #[arg(long, value_parser = ["json", "yaml", "hex"], default_value = "hex")]
         format: String,
+        /// Generate and save palette image to this path
+        #[arg(long)]
+        save_image: Option<String>,
+        /// Image width in pixels
+        #[arg(long, default_value = "960")]
+        image_width: u32,
+        /// Image height in pixels
+        #[arg(long, default_value = "320")]
+        image_height: u32,
+        /// Image label style
+        #[arg(long, value_parser = ["hex", "base16", "index", "none"], default_value = "index")]
+        image_label: String,
     },
     /// Export Base16 palette from scheme
     Base16 {
@@ -480,7 +504,18 @@ fn handle_scheme(action: SchemeAction) {
 
 fn handle_palette(action: PaletteAction) {
     match action {
-        PaletteAction::FromBase { base, harmony, count, min_contrast, background, format } => {
+        PaletteAction::FromBase {
+            base,
+            harmony,
+            count,
+            min_contrast,
+            background,
+            format,
+            save_image,
+            image_width,
+            image_height,
+            image_label,
+        } => {
             let base_color = match parse_hex_color(&base) {
                 Ok(color) => color,
                 Err(err) => {
@@ -511,9 +546,23 @@ fn handle_palette(action: PaletteAction) {
                 eprintln!("No colors meet the requested constraints.");
             } else {
                 output_palette(&palette, &format);
+
+                if let Some(image_path) = save_image {
+                    generate_palette_image(&palette, &image_path, image_width, image_height, &image_label);
+                }
             }
         }
-        PaletteAction::Random { count, method, min_delta_e, theme, format } => {
+        PaletteAction::Random {
+            count,
+            method,
+            min_delta_e,
+            theme,
+            format,
+            save_image,
+            image_width,
+            image_height,
+            image_label,
+        } => {
             let palette = match method.as_str() {
                 "golden" => {
                     let (s_range, l_range) = golden_theme_ranges(theme.as_deref());
@@ -540,6 +589,10 @@ fn handle_palette(action: PaletteAction) {
                 eprintln!("No colors generated.");
             } else {
                 output_palette(&palette, &format);
+
+                if let Some(image_path) = save_image {
+                    generate_palette_image(&palette, &image_path, image_width, image_height, &image_label);
+                }
             }
         }
         // TODO: add combined JSON/YAML output when directory inputs produce multiple schemes.
@@ -620,6 +673,25 @@ fn base16_labels(len: usize) -> Vec<String> {
         "base16", "base17",
     ];
     BASE16_KEYS.iter().take(len).map(|label| label.to_string()).collect()
+}
+
+/// Generate and save a palette image with the specified parameters
+fn generate_palette_image(palette: &[Srgb8], path: &str, width: u32, height: u32, label_style: &str) {
+    let image = match label_style {
+        "hex" => palette_to_image(palette, PaletteLabelStyle::Hex, (width, height)),
+        "index" => palette_to_image(palette, PaletteLabelStyle::Index, (width, height)),
+        "base16" => {
+            let labels = base16_labels(palette.len());
+            palette_to_image(palette, PaletteLabelStyle::Custom(&labels), (width, height))
+        }
+        _ => palette_to_image(palette, PaletteLabelStyle::None, (width, height)),
+    };
+
+    if let Err(err) = image.save(path) {
+        eprintln!("Failed to save palette image to {path}: {err}");
+    } else {
+        println!("Saved palette image to {path}");
+    }
 }
 
 fn print_scheme_header(meta: &SchemeMetadata) {
